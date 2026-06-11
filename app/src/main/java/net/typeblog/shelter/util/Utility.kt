@@ -876,6 +876,59 @@ object Utility {
 
     private const val NOTIFICATION_CHANNEL_ID = "ShelterService"
     private const val NOTIFICATION_CHANNEL_IMPORTANT = "ShelterService-Important"
+    private const val NOTIFICATION_CHANNEL_USER_ALERTS = "ShelterUserAlerts"
+
+    fun postUserAlert(
+        context: Context,
+        notificationId: Int,
+        title: String,
+        text: String,
+        icon: Int = R.drawable.ic_lock_open_white_24dp,
+    ) {
+        val app = context.applicationContext
+        app.getSystemService(NotificationManager::class.java).notify(
+            notificationId,
+            buildUserAlertNotification(app, title, text, icon),
+        )
+    }
+
+    fun buildUserAlertNotification(
+        context: Context,
+        title: String,
+        text: String,
+        icon: Int = R.drawable.ic_lock_open_white_24dp,
+    ): Notification {
+        val app = context.applicationContext
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val nm = app.getSystemService(NotificationManager::class.java)
+            if (nm.getNotificationChannel(NOTIFICATION_CHANNEL_USER_ALERTS) == null) {
+                val chan = NotificationChannel(
+                    NOTIFICATION_CHANNEL_USER_ALERTS,
+                    app.getString(R.string.notifications_important),
+                    NotificationManager.IMPORTANCE_HIGH,
+                )
+                chan.enableVibration(true)
+                nm.createNotificationChannel(chan)
+            }
+            return Notification.Builder(app, NOTIFICATION_CHANNEL_USER_ALERTS)
+                .setContentTitle(title)
+                .setContentText(text)
+                .setStyle(Notification.BigTextStyle().bigText(text))
+                .setSmallIcon(icon)
+                .setAutoCancel(false)
+                .setOnlyAlertOnce(true)
+                .setCategory(Notification.CATEGORY_STATUS)
+                .build()
+        }
+        return Notification.Builder(app)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setStyle(Notification.BigTextStyle().bigText(text))
+            .setSmallIcon(icon)
+            .setPriority(Notification.PRIORITY_MAX)
+            .setAutoCancel(false)
+            .build()
+    }
 
     fun buildNotification(
         context: Context,

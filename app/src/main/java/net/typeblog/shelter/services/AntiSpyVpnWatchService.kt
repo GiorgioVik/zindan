@@ -1,7 +1,6 @@
 package net.typeblog.shelter.services
 
 import android.app.AlarmManager
-import android.app.Notification
 import android.app.PendingIntent
 import android.app.Service
 import android.content.BroadcastReceiver
@@ -28,17 +27,18 @@ import net.typeblog.shelter.util.Utility
 import net.typeblog.shelter.util.VpnTunnelDetector
 
 /**
- * Background VPN watcher while Anti Spy (golden shield) is on.
- * Runs batch freeze when VPN appears (MacroDroid-style NetworkCallback).
+ * Scenario 2: external VPN up → notify → dummy displacement → full-screen freeze prompt.
+ * VPN state edges use MacroDroid VpnTrigger-style reconcile.
  */
 class AntiSpyVpnWatchService : Service() {
     private var connectivityManager: ConnectivityManager? = null
     private var vpnCallback: ConnectivityManager.NetworkCallback? = null
     private var defaultCallback: ConnectivityManager.NetworkCallback? = null
     private val handler = Handler(Looper.getMainLooper())
-    private val freezeRunnable = Runnable { maybeFreezeAllForVpn() }
+    private val scenario2Runnable = Runnable { runScenario2AfterVpnUp() }
     private val pollRunnable = Runnable { pollVpnState() }
     private var vpnPresent = false
+    private var scenario2Running = false
     private var foregroundStarted = false
     private var connectivityReceiver: BroadcastReceiver? = null
 
@@ -56,18 +56,7 @@ class AntiSpyVpnWatchService : Service() {
     }
 
     private fun pollVpnState() {
-        val active = scanVpnActive()
-        if (active && !vpnPresent) {
-            if (AntiSpyDummyVpnDisconnector.isSuppressingVpnReactions()) {
-                Log.d(TAG, "poll: vpn active but reactions suppressed")
-            } else {
-                Log.i(TAG, "poll: vpn became active")
-                onVpnStateChanged(true)
-            }
-        } else if (!active && vpnPresent) {
-            vpnPresent = false
-            AntiSpyVpnPromptManager.onVpnSessionEnded()
-        }
+        reconcileVpnState("poll")
         handler.postDelayed(pollRunnable, VPN_POLL_MS)
     }
 
@@ -99,10 +88,8 @@ class AntiSpyVpnWatchService : Service() {
         if (connectivityReceiver != null) return
         connectivityReceiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) {
-                if (VpnTunnelDetector.isVpnActive(context)) {
-                    Log.d(TAG, "CONNECTIVITY_ACTION vpn active")
-                    onVpnStateChanged(true)
-                }
+                Log.d(TAG, "CONNECTIVITY_ACTION")
+                reconcileVpnState("connectivity")
             }
         }
         try {
@@ -124,21 +111,16 @@ class AntiSpyVpnWatchService : Service() {
             vpnCallback = object : ConnectivityManager.NetworkCallback() {
                 override fun onAvailable(network: Network) {
                     Log.d(TAG, "vpn callback onAvailable")
-                    onVpnStateChanged(true)
+                    reconcileVpnState("vpn-available")
                 }
 
                 override fun onLost(network: Network) {
-                    onVpnStateChanged(scanVpnActive())
+                    Log.d(TAG, "vpn callback onLost")
+                    reconcileVpnState("vpn-lost")
                 }
 
                 override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
-                    val vpn = caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN) ||
-                        !caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
-                    if (vpn) {
-                        onVpnStateChanged(true)
-                    } else {
-                        onVpnStateChanged(scanVpnActive())
-                    }
+                    reconcileVpnState("vpn-caps")
                 }
             }
             try {
@@ -151,13 +133,16 @@ class AntiSpyVpnWatchService : Service() {
 
         if (defaultCallback == null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             defaultCallback = object : ConnectivityManager.NetworkCallback() {
+                override fun onAvailable(network: Network) {
+                    reconcileVpnState("default-available")
+                }
+
+                override fun onLost(network: Network) {
+                    reconcileVpnState("default-lost")
+                }
+
                 override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
-                    val vpn = caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN) ||
-                        !caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
-                    if (vpn) {
-                        Log.d(TAG, "default network vpn capabilities")
-                        onVpnStateChanged(true)
-                    }
+                    reconcileVpnState("default-caps")
                 }
             }
             try {
@@ -169,49 +154,81 @@ class AntiSpyVpnWatchService : Service() {
         }
     }
 
-    private fun onVpnStateChanged(vpnActive: Boolean) {
-        if (vpnActive == vpnPresent) return
-        vpnPresent = vpnActive
-        handler.removeCallbacks(freezeRunnable)
-        if (!vpnActive) {
-            AntiSpyVpnPromptManager.onVpnSessionEnded()
+    private fun reconcileVpnState(source: String) {
+        if (AntiSpyDummyVpnDisconnector.isSuppressingVpnReactions() || scenario2Running) {
+            Log.d(TAG, "reconcile skipped ($source): displacement in progress")
             return
         }
-        handler.postDelayed(freezeRunnable, FREEZE_DEBOUNCE_MS)
+        val active = VpnTunnelDetector.isVpnActive(this)
+        if (active == vpnPresent) {
+            return
+        }
+        Log.i(TAG, "vpn edge $source: ${if (active) "activated" else "deactivated"}")
+        onVpnStateChanged(active)
     }
 
-    private fun maybeFreezeAllForVpn() {
+    private fun isMainProfileWatcher(): Boolean = !AntiSpyManager.isWorkProfile(this)
+
+    private fun onVpnStateChanged(vpnActive: Boolean) {
+        vpnPresent = vpnActive
+        handler.removeCallbacks(scenario2Runnable)
+        if (!vpnActive) {
+            AntiSpyVpnPromptManager.onVpnSessionEnded()
+            scenario2Running = false
+            if (isMainProfileWatcher()) {
+                postVpnStateAlert(R.string.anti_spy_vpn_alert_disconnected_text)
+            }
+            return
+        }
+        if (!isMainProfileWatcher()) {
+            return
+        }
+        postVpnStateAlert(R.string.anti_spy_vpn_alert_connected_text)
+        handler.postDelayed(scenario2Runnable, SCENARIO2_DEBOUNCE_MS)
+    }
+
+    private fun postVpnStateAlert(textResId: Int) {
+        val title = getString(R.string.anti_spy_monitor_notification_title)
+        val text = getString(textResId)
+        Utility.postUserAlert(this, VPN_STATE_NOTIFICATION_ID, title, text)
+    }
+
+    private fun runScenario2AfterVpnUp() {
+        if (!isMainProfileWatcher()) {
+            return
+        }
         if (AntiSpyDummyVpnDisconnector.isSuppressingVpnReactions()) {
-            Log.d(TAG, "prompt skipped: dummy vpn cycle")
+            Log.d(TAG, "scenario2 skipped: dummy vpn cycle")
             return
         }
         if (AntiSpyVpnPromptManager.isPromptActive()) {
-            Log.d(TAG, "prompt skipped: already showing")
+            Log.d(TAG, "scenario2 skipped: prompt already showing")
             return
         }
         if (AntiSpyVpnPromptManager.isDeclinedForCurrentVpnSession()) {
-            Log.d(TAG, "prompt skipped: user declined for this VPN session")
+            Log.d(TAG, "scenario2 skipped: user declined this VPN session")
             return
         }
         if (!VpnTunnelDetector.isVpnActive(this)) {
-            Log.d(TAG, "prompt cancelled: vpn no longer active")
+            Log.d(TAG, "scenario2 cancelled: vpn no longer active")
             vpnPresent = false
-            AntiSpyVpnPromptManager.onVpnSessionEnded()
             return
         }
+        scenario2Running = true
         VpnTunnelDetector.logDiagnostics(this)
-        Log.i(TAG, "VPN detected, brief dummy displacement then user prompt")
+        Log.i(TAG, "scenario2: dummy displacement then freeze prompt")
         AntiSpyDummyVpnDisconnector.tryClearVpnAsync(this) { result ->
+            scenario2Running = false
             if (AntiSpyVpnPromptManager.isDeclinedForCurrentVpnSession()) {
                 return@tryClearVpnAsync
             }
             if (AntiSpyVpnPromptManager.isPromptActive()) {
                 return@tryClearVpnAsync
             }
-            Log.i(TAG, "dummy displacement result=$result")
+            Log.i(TAG, "scenario2 displacement result=$result")
             when (result) {
                 AntiSpyDummyVpnDisconnector.RESULT_CLEARED ->
-                    AntiSpyVpnPromptManager.showPrompt(this)
+                    AntiSpyVpnPromptManager.showFreezePromptAfterDisplacement(this)
                 AntiSpyDummyVpnDisconnector.RESULT_VPN_PERMISSION_REQUIRED ->
                     AntiSpyVpnPromptManager.showVpnPermissionNeeded(this)
                 else ->
@@ -219,8 +236,6 @@ class AntiSpyVpnWatchService : Service() {
             }
         }
     }
-
-    private fun scanVpnActive(): Boolean = VpnTunnelDetector.isVpnActive(this)
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
@@ -231,7 +246,7 @@ class AntiSpyVpnWatchService : Service() {
     override fun onDestroy() {
         Log.i(TAG, "onDestroy")
         scheduleRestartIfNeeded()
-        handler.removeCallbacks(freezeRunnable)
+        handler.removeCallbacks(scenario2Runnable)
         handler.removeCallbacks(pollRunnable)
         connectivityReceiver?.let { receiver ->
             try {
@@ -296,7 +311,8 @@ class AntiSpyVpnWatchService : Service() {
     companion object {
         private const val TAG = "AntiSpyVpnWatch"
         private const val NOTIFICATION_ID = 0xe49d0
-        private const val FREEZE_DEBOUNCE_MS = 1500L
+        private const val VPN_STATE_NOTIFICATION_ID = 0xe49d1
+        private const val SCENARIO2_DEBOUNCE_MS = 1500L
         private const val VPN_POLL_MS = 2000L
 
         fun syncState(context: Context) {

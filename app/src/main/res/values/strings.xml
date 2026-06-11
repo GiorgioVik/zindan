@@ -54,11 +54,13 @@
     <string name="anti_spy_vpn_permission_required">Allow Zindan VPN access once so Anti Spy can clear third-party VPN before launch.</string>
     <string name="anti_spy_vpn_permission_grant">Allow VPN access</string>
     <string name="anti_spy_monitor_notification_title">Anti Spy</string>
-    <string name="anti_spy_monitor_notification_text">Watching for VPN connections</string>
+    <string name="anti_spy_monitor_notification_text">VPN monitoring</string>
+    <string name="anti_spy_vpn_alert_connected_text">VPN connected</string>
+    <string name="anti_spy_vpn_alert_disconnected_text">VPN disconnected</string>
     <string name="anti_spy_dummy_vpn_session">Zindan Anti Spy</string>
-    <string name="anti_spy_vpn_prompt_title">VPN connection detected</string>
-    <string name="anti_spy_vpn_prompt_text">A VPN was turned on. Close the running app in the work profile, then tap Yes to batch-freeze auto-freeze apps. Tap No to leave apps running (Zindan will not turn VPN back on).</string>
-    <string name="anti_spy_vpn_prompt_yes">Yes, freeze all</string>
+    <string name="anti_spy_vpn_prompt_title">Anti Spy</string>
+    <string name="anti_spy_vpn_prompt_text">VPN disconnected. Freeze apps in Zindan before turning VPN on again.</string>
+    <string name="anti_spy_vpn_prompt_yes">Yes</string>
     <string name="anti_spy_vpn_prompt_no">No</string>
     <string name="anti_spy_vpn_prompt_permission_title">Allow VPN access for Anti Spy</string>
     <string name="anti_spy_vpn_prompt_permission_text">Zindan needs VPN permission once in the main profile to interrupt external VPN before the freeze prompt. Open Zindan and allow VPN access, then try again.</string>
@@ -102,7 +104,7 @@
     <string name="settings_about">About</string>
     <string name="settings_version">Version</string>
     <string name="settings_source_code">Source Code</string>
-    <string name="settings_source_code_url" translatable="false">D:\Zindan3</string>
+    <string name="settings_source_code_url" translatable="false">D:\Zindan4</string>
 
     <!-- Toast Long Texts -->
     <string name="provision_finished">Zindan setup complete. Now restarting Zindan. If Zindan didn\'t start automatically, you may launch it again from your launcher.</string>

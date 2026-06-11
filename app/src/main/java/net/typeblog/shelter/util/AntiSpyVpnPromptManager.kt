@@ -1,17 +1,18 @@
 package net.typeblog.shelter.util
 
 import android.app.ActivityOptions
+import android.app.AlarmManager
+import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import android.os.SystemClock
 import android.util.Log
 import net.typeblog.shelter.ui.AntiSpyVpnPromptActivity
 import net.typeblog.shelter.ui.DummyActivity
 import java.util.concurrent.atomic.AtomicBoolean
 
-/**
- * Shows Anti Spy VPN dialogs on the home screen (Activity), not in the notification shade.
- */
+/** Full-screen Anti Spy dialogs for scenario 2 (VPN detected externally). */
 object AntiSpyVpnPromptManager {
     private const val TAG = "AntiSpyVpnPrompt"
 
@@ -32,51 +33,73 @@ object AntiSpyVpnPromptManager {
         declinedForCurrentVpnSession = false
     }
 
-    /** Freeze Yes/No — only after external VPN was displaced. */
-    fun showPrompt(context: Context) {
-        val app = context.applicationContext
+    /** After dummy VPN displaced the external tunnel — do not re-check VPN (tun may linger). */
+    fun showFreezePromptAfterDisplacement(context: Context) {
         if (freezePromptActive.getAndSet(true)) {
             return
         }
-        if (VpnTunnelDetector.isVpnActive(app)) {
-            Log.w(TAG, "showPrompt refused: vpn still active")
-            freezePromptActive.set(false)
-            return
-        }
-        launchScreenDialog(context, MODE_FREEZE_PROMPT)
+        scheduleScreenDialog(context, MODE_FREEZE_PROMPT)
     }
 
     fun showVpnPermissionNeeded(context: Context) {
-        launchScreenDialog(context, MODE_VPN_PERMISSION)
+        scheduleScreenDialog(context, MODE_VPN_PERMISSION)
     }
 
     fun showDisplacementFailed(context: Context) {
-        launchScreenDialog(context, MODE_DISPLACEMENT_FAILED)
+        scheduleScreenDialog(context, MODE_DISPLACEMENT_FAILED)
     }
 
-    private fun launchScreenDialog(context: Context, mode: Int) {
+    /**
+     * AlarmManager → Activity bypasses background-activity blocks from the :vpnwatch FGS process.
+     */
+    private fun scheduleScreenDialog(context: Context, mode: Int) {
         val app = context.applicationContext
         val intent = Intent(app, AntiSpyVpnPromptActivity::class.java)
         intent.putExtra(EXTRA_MODE, mode)
         intent.addFlags(
             Intent.FLAG_ACTIVITY_NEW_TASK
-                    or Intent.FLAG_ACTIVITY_CLEAR_TOP
-                    or Intent.FLAG_ACTIVITY_SINGLE_TOP
-                    or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
-                    or Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
+                or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+                or Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
         )
 
+        val requestCode = 0xE49F0 + mode
+        val pi = PendingIntent.getActivity(
+            app,
+            requestCode,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        val am = app.getSystemService(AlarmManager::class.java)
+        if (am != null) {
+            try {
+                am.set(
+                    AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                    SystemClock.elapsedRealtime() + 50,
+                    pi,
+                )
+                Log.i(TAG, "screen dialog scheduled mode=$mode")
+                return
+            } catch (e: Exception) {
+                Log.w(TAG, "AlarmManager schedule failed mode=$mode", e)
+            }
+        }
+        launchScreenDialogDirect(app, intent, mode)
+    }
+
+    private fun launchScreenDialogDirect(context: Context, intent: Intent, mode: Int) {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
                 val options = ActivityOptions.makeBasic()
                 options.setPendingIntentBackgroundActivityStartMode(
                     ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED
                 )
-                app.startActivity(intent, options.toBundle())
+                context.startActivity(intent, options.toBundle())
             } else {
-                app.startActivity(intent)
+                context.startActivity(intent)
             }
-            Log.i(TAG, "screen dialog launched mode=$mode")
+            Log.i(TAG, "screen dialog launched direct mode=$mode")
         } catch (e: Exception) {
             Log.e(TAG, "launchScreenDialog failed mode=$mode", e)
             if (mode == MODE_FREEZE_PROMPT) {
