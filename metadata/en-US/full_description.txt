@@ -1,0 +1,11 @@
+Zindan is a Free and Open-Source (FOSS) app that leverages the "Work Profile" feature of Android to provide an isolated space that you can install or clone apps into.
+
+Zindan is a fork of Shelter, rebuilt from upstream with Zindan branding.
+
+The main use-cases of Zindan include:
+
+- Installing apps inside a work profile for isolation
+- "Freeze" apps inside the work profile to prevent them from running or being woken up when you are not actively using them
+- Installing two copies of the same app on the same device
+
+Note that Zindan depends on the Work Profile feature of the Android system, so any bugs related to Work Profiles in the Android-derived system you are using will affect Zindan. In addition, Zindan can only be as secure as the Work Profile implementation.

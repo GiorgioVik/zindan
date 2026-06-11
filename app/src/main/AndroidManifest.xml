@@ -1,0 +1,234 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:installLocation="internalOnly" >
+
+    <uses-feature android:name="android.software.device_admin" android:required="true"/>
+    <uses-feature android:name="android.software.managed_users" android:required="true"/>
+
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+    <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SYSTEM_EXEMPTED" />
+    <uses-permission android:maxSdkVersion="25"
+        android:name="com.android.launcher.permission.INSTALL_SHORTCUT" />
+    <uses-permission android:maxSdkVersion="25"
+        android:name="com.android.launcher.permission.UNINSTALL_SHORTCUT" />
+    <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
+        tools:ignore="ScopedStorage" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <uses-permission android:name="android.permission.NFC" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
+    <!-- For querying apps on Android R and later -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.MAIN"/>
+        </intent>
+    </queries>
+
+    <application
+        android:name=".ShelterApplication"
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher_egg"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_egg_round"
+        android:supportsRtl="true"
+        android:theme="@style/AppTheme">
+
+        <!-- The main activity for UI -->
+        <activity android:name=".ui.MainActivity"
+            android:launchMode="singleTask"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Setup Wizard -->
+        <activity android:name=".ui.SetupWizardActivity"
+            android:theme="@style/SuwThemeMaterial.Light"
+            android:launchMode="singleTask"
+            android:exported="false"/>
+
+        <!-- The Settings activity -->
+        <activity android:name=".ui.SettingsActivity"
+            android:label="@string/settings" />
+
+        <activity android:name=".ui.AntiSpyVpnPromptActivity"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:exported="false"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
+            android:showOnLockScreen="true"
+            android:theme="@style/Theme.AppCompat.Translucent.NoTitleBar" />
+
+        <!-- An activity that wraps intents that cross the profile boundary -->
+        <!-- Needed because only cross-profile Activity intents are supported -->
+        <activity android:name=".ui.DummyActivity"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:theme="@style/Theme.AppCompat.Translucent.NoTitleBar"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="net.typeblog.shelter.action.FINALIZE_PROVISION" />
+                <action android:name="net.typeblog.shelter.action.START_SERVICE" />
+                <action android:name="net.typeblog.shelter.action.TRY_START_SERVICE" />
+                <action android:name="net.typeblog.shelter.action.INSTALL_PACKAGE" />
+                <action android:name="net.typeblog.shelter.action.UNINSTALL_PACKAGE" />
+                <action android:name="net.typeblog.shelter.action.UNFREEZE_AND_LAUNCH" />
+                <action android:name="net.typeblog.shelter.action.PUBLIC_UNFREEZE_AND_LAUNCH" />
+                <action android:name="net.typeblog.shelter.action.PUBLIC_FREEZE_ALL" />
+                <action android:name="net.typeblog.shelter.action.PUBLIC_UNFREEZE_ALL" />
+                <action android:name="net.typeblog.shelter.action.FREEZE_ALL_IN_LIST" />
+                <action android:name="net.typeblog.shelter.action.UNFREEZE_ALL_IN_LIST" />
+                <action android:name="net.typeblog.shelter.action.ENABLE_AUTO_FREEZE_WORK_PROFILE" />
+                <action android:name="net.typeblog.shelter.action.REMOVE_UNFREEZE_SHORTCUT" />
+                <!-- We need two of these to avoid being prompted with an action chooser dialog -->
+                <!-- When the intent is actually already forwarded to work profile -->
+                <action android:name="net.typeblog.shelter.action.START_FILE_SHUTTLE" />
+                <action android:name="net.typeblog.shelter.action.START_FILE_SHUTTLE_2" />
+                <action android:name="net.typeblog.shelter.action.SYNCHRONIZE_PREFERENCE" />
+                <action android:name="net.typeblog.shelter.action.SYNC_ANTI_SPY_VPN_WATCH" />
+                <action android:name="net.typeblog.shelter.action.PACKAGEINSTALLER_CALLBACK" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <!-- An activity to listen to ACTION_PROVISIONING_SUCCESSFUL for finalization -->
+        <!-- This replaces the functionality of ShelterDeviceAdminReceiver on Oreo and above -->
+        <activity android:name=".ui.FinalizeActivity"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:theme="@style/Theme.AppCompat.Translucent.NoTitleBar"
+            android:permission="android.permission.BIND_DEVICE_ADMIN"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.app.action.PROVISIONING_SUCCESSFUL" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <receiver android:name=".receivers.AntiSpyBootReceiver"
+            android:exported="true"
+            android:enabled="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+
+        <receiver android:name=".receivers.WorkProfilePackageAddedReceiver"
+            android:exported="true"
+            android:enabled="true">
+            <intent-filter>
+                <action android:name="android.intent.action.PACKAGE_ADDED" />
+                <data android:scheme="package" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Implementation of the device policy controller -->
+        <receiver android:name=".receivers.ShelterDeviceAdminReceiver"
+            android:label="@string/device_admin_label"
+            android:description="@string/device_admin_desc"
+            android:permission="android.permission.BIND_DEVICE_ADMIN"
+            android:exported="true">
+            <meta-data android:name="android.app.device_admin"
+                android:resource="@xml/device_admin" />
+            <intent-filter>
+                <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
+                <action android:name="android.app.action.DEVICE_ADMIN_DISABLED" />
+                <action android:name="android.app.action.PROVISION_MANAGED_PROFILE" />
+            </intent-filter>
+        </receiver>
+
+        <!-- A FileProvider that proxies opened Fd from the other profile -->
+        <provider
+            android:name="net.typeblog.shelter.util.FileProviderProxy"
+            android:authorities="net.typeblog.shelter.files"
+            android:grantUriPermissions="true"
+            android:exported="false">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
+        <!-- A DocumentsProvider that lists files in another profile -->
+        <provider
+            android:name="net.typeblog.shelter.util.CrossProfileDocumentsProvider"
+            android:authorities="net.typeblog.shelter.documents"
+            android:grantUriPermissions="true"
+            android:permission="android.permission.MANAGE_DOCUMENTS"
+            android:exported="true"
+            android:enabled="false">
+            <intent-filter>
+                <action android:name="android.content.action.DOCUMENTS_PROVIDER" />
+            </intent-filter>
+        </provider>
+
+        <!-- Core service running on both the main profile and the work profile -->
+        <!-- Actions like cloning / freezing apps will be performed by this service -->
+        <service android:name=".services.ShelterService"
+                android:exported="true"
+                android:foregroundServiceType="systemExempted"
+                android:permission="android.permission.BIND_DEVICE_ADMIN"/>
+
+        <!-- Service to forward file information between profiles -->
+        <service android:name=".services.FileShuttleService"
+                android:exported="true"
+                android:permission="android.permission.BIND_DEVICE_ADMIN" />
+
+        <!-- A hack service to ensure every ShelterService is killed when App is removed -->
+        <!-- from recent tasks -->
+        <service android:name=".services.KillerService" />
+
+        <!-- Service to freeze apps on screen lock -->
+        <service android:name=".services.FreezeService"
+            android:foregroundServiceType="systemExempted" />
+
+        <service android:name=".services.AntiSpyVpnWatchService"
+            android:exported="false"
+            android:process=":vpnwatch"
+            android:stopWithTask="false"
+            android:foregroundServiceType="systemExempted" />
+
+        <service android:name=".services.BatchFreezeService"
+            android:exported="false"
+            android:stopWithTask="false">
+            <intent-filter>
+                <action android:name="net.typeblog.shelter.action.BATCH_FREEZE_WORK" />
+            </intent-filter>
+        </service>
+
+        <service android:name=".services.AntiSpyDummyVpnService"
+            android:exported="false"
+            android:process=":vpnwatch"
+            android:permission="android.permission.BIND_VPN_SERVICE">
+            <intent-filter>
+                <action android:name="android.net.VpnService" />
+            </intent-filter>
+        </service>
+
+        <!-- Payment stub service -->
+        <service android:name=".services.PaymentStubService"
+            android:exported="true"
+            android:enabled="false"
+            android:permission="android.permission.BIND_NFC_SERVICE">
+            <intent-filter>
+                <action android:name="android.nfc.cardemulation.action.HOST_APDU_SERVICE"/>
+            </intent-filter>
+            <meta-data android:name="android.nfc.cardemulation.host_apdu_service"
+                android:resource="@xml/payment_stub"/>
+        </service>
+
+    </application>
+
+</manifest>

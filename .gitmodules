@@ -1,0 +1,4 @@
+[submodule "libs/SetupWizardLibrary"]
+	path = libs/SetupWizardLibrary
+	url = https://gitea.angry.im/PeterCxy/SetupWizardLibrary.git
+	branch = main
