@@ -44,6 +44,7 @@ import net.typeblog.shelter.R
 import net.typeblog.shelter.receivers.ShelterDeviceAdminReceiver
 import net.typeblog.shelter.services.BatchFreezeService
 import net.typeblog.shelter.services.IShelterService
+import net.typeblog.shelter.ui.AppListFragment
 import net.typeblog.shelter.ui.DummyActivity
 import net.typeblog.shelter.ui.MainActivity
 import java.io.BufferedReader
@@ -56,6 +57,7 @@ import java.io.OutputStream
 object Utility {
     private const val TAG = "Utility"
     private const val APP_LIST_REFRESH_DELAY_MS = 700L
+    const val VPN_AUTO_FREEZE_SUCCESS_NOTIFICATION_ID = 0xe49d3
 
     /** [LocalStorageManager.getStringList] yields `[""]` for an empty list. */
     fun normalizeStringList(list: Array<String>?): Array<String> {
@@ -71,19 +73,94 @@ object Utility {
     /**
      * Foreground delivery: [DummyActivity.FREEZE_ALL_IN_LIST] in the work profile.
      */
-    fun launchFreezeInWorkProfile(context: Context, list: Array<String>): Boolean {
+    fun launchFreezeInWorkProfile(
+        context: Context,
+        list: Array<String>,
+        vpnAutoFreeze: Boolean = false,
+    ): Boolean {
         val normalized = normalizeStringList(list)
         if (normalized.isEmpty()) {
             return false
         }
         return try {
-            val intent = freezeAllInListIntent(normalized)
+            val intent = freezeAllInListIntent(normalized, vpnAutoFreeze)
             transferIntentToProfile(context, intent)
             context.startActivity(intent)
             Log.i(TAG, "launch work-profile freeze for ${normalized.size} apps")
             true
         } catch (e: Exception) {
             Log.w(TAG, "launchFreezeInWorkProfile failed", e)
+            false
+        }
+    }
+
+    /**
+     * Cross-profile [DummyActivity] via AlarmManager when [Context.startActivity] is blocked
+     * (e.g. from the `:vpnwatch` FGS process).
+     */
+    fun scheduleCrossProfileActivity(
+        context: Context,
+        intent: Intent,
+        requestCode: Int,
+        delayMs: Long = 50L,
+    ): Boolean {
+        return try {
+            val app = context.applicationContext
+            val pi = PendingIntent.getActivity(
+                app,
+                requestCode,
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+            val am = app.getSystemService(AlarmManager::class.java) ?: return false
+            am.set(
+                AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                SystemClock.elapsedRealtime() + delayMs,
+                pi,
+            )
+            Log.i(TAG, "scheduled cross-profile activity rc=$requestCode")
+            true
+        } catch (e: Exception) {
+            Log.w(TAG, "scheduleCrossProfileActivity failed", e)
+            false
+        }
+    }
+
+    /**
+     * Background delivery from `:vpnwatch` FGS: AlarmManager opens main-profile
+     * [DummyActivity.PUBLIC_FREEZE_ALL] — the same chain as the snowflake button.
+     */
+    fun schedulePublicFreezeAllFromBackground(context: Context): Boolean {
+        return try {
+            val app = context.applicationContext
+            LocalStorageManager.initialize(app)
+            val intent = Intent(app, DummyActivity::class.java)
+            intent.action = DummyActivity.PUBLIC_FREEZE_ALL
+            intent.putExtra(AntiSpyManager.EXTRA_VPN_AUTO_FREEZE, true)
+            intent.addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK
+                    or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                    or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                    or Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
+            )
+            AuthenticationUtility.signIntent(intent)
+            val pi = PendingIntent.getActivity(
+                app,
+                0xE49E2,
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+            val am = app.getSystemService(AlarmManager::class.java)
+                ?: return false
+            am.set(
+                AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                SystemClock.elapsedRealtime() + 50,
+                pi,
+            )
+            Log.i(TAG, "scheduled PUBLIC_FREEZE_ALL from background")
+            true
+        } catch (e: Exception) {
+            Log.w(TAG, "schedulePublicFreezeAllFromBackground failed", e)
             false
         }
     }
@@ -124,11 +201,7 @@ object Utility {
             }
             try {
                 val profileContext = createContextAsUser(context, profile)
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    profileContext.startForegroundService(intent)
-                } else {
-                    profileContext.startService(intent)
-                }
+                profileContext.startService(intent)
                 Log.i(TAG, "startService in managed profile ok: ${intent.component}")
                 return true
             } catch (e: Exception) {
@@ -168,21 +241,10 @@ object Utility {
             return
         }
         try {
-            val intent = freezeAllInListIntent(normalized)
+            val intent = freezeAllInListIntent(normalized, vpnAutoFreeze = true)
             transferIntentToProfile(context, intent)
-            val pi = PendingIntent.getActivity(
-                context,
-                0xE49E1,
-                intent,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-            val am = context.getSystemService(AlarmManager::class.java)
-            if (am != null) {
-                am.set(
-                    AlarmManager.ELAPSED_REALTIME_WAKEUP,
-                    SystemClock.elapsedRealtime() + 50,
-                    pi
-                )
+            AuthenticationUtility.signIntent(intent)
+            if (scheduleCrossProfileActivity(context, intent, 0xE49E1)) {
                 Log.i(TAG, "scheduled work-profile freeze for ${normalized.size} apps")
             }
         } catch (e: Exception) {
@@ -190,11 +252,24 @@ object Utility {
         }
     }
 
-    private fun freezeAllInListIntent(list: Array<String>): Intent {
+    private fun freezeAllInListIntent(list: Array<String>, vpnAutoFreeze: Boolean = false): Intent {
         val intent = Intent(DummyActivity.FREEZE_ALL_IN_LIST)
         intent.putExtra("list", list)
+        if (vpnAutoFreeze) {
+            intent.putExtra(AntiSpyManager.EXTRA_VPN_AUTO_FREEZE, true)
+        }
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         return intent
+    }
+
+    fun postVpnAutoFreezeSuccessAlert(context: Context) {
+        val app = context.applicationContext
+        postUserAlert(
+            app,
+            VPN_AUTO_FREEZE_SUCCESS_NOTIFICATION_ID,
+            app.getString(R.string.anti_spy_monitor_notification_title),
+            app.getString(R.string.freeze_all_success),
+        )
     }
 
     /** Refresh app lists after a cross-profile freeze/unfreeze DummyActivity finishes. */
@@ -202,7 +277,7 @@ object Utility {
         val appContext = context.applicationContext
         Handler(Looper.getMainLooper()).postDelayed({
             LocalBroadcastManager.getInstance(appContext)
-                .sendBroadcast(Intent("net.typeblog.shelter.broadcast.REFRESH"))
+                .sendBroadcast(Intent(AppListFragment.BROADCAST_REFRESH))
         }, APP_LIST_REFRESH_DELAY_MS)
     }
 
@@ -233,6 +308,7 @@ object Utility {
 
     fun transferIntentToProfileUnsigned(context: Context, intent: Intent) {
         val pm = context.packageManager
+        @Suppress("DEPRECATION")
         val info = pm.queryIntentActivities(intent, 0)
         val match = info.stream()
             .filter { r -> r.activityInfo.packageName != context.packageName }
@@ -242,9 +318,36 @@ object Utility {
                 match.get().activityInfo.packageName,
                 match.get().activityInfo.name
             )
-        } else {
-            throw IllegalStateException("Cannot find an intent in other profile")
+            return
         }
+        if (resolveCrossProfileDummyComponent(context, intent)) {
+            Log.d(TAG, "cross-profile intent via managed DummyActivity fallback")
+            return
+        }
+        throw IllegalStateException("Cannot find an intent in other profile")
+    }
+
+    /**
+     * Parent → work when both profiles share [context.packageName] and queryIntentActivities
+     * does not return a separate resolve target (common on Samsung / Android 15).
+     */
+    fun resolveCrossProfileDummyComponent(context: Context, intent: Intent): Boolean {
+        if (isProfileOwner(context)) {
+            return false
+        }
+        val um = context.getSystemService(UserManager::class.java) ?: return false
+        val self = Process.myUserHandle()
+        for (profile in um.userProfiles) {
+            if (profile == self) {
+                continue
+            }
+            intent.component = ComponentName(
+                context.packageName,
+                DummyActivity::class.java.name,
+            )
+            return true
+        }
+        return false
     }
 
     fun isWorkProfileAvailable(context: Context): Boolean {
@@ -297,6 +400,12 @@ object Utility {
             adminComponent,
             IntentFilter(DummyActivity.FREEZE_ALL_IN_LIST),
             DevicePolicyManager.FLAG_MANAGED_CAN_ACCESS_PARENT
+        )
+
+        manager.addCrossProfileIntentFilter(
+            adminComponent,
+            IntentFilter(DummyActivity.FREEZE_ALL_IN_LIST),
+            DevicePolicyManager.FLAG_PARENT_CAN_ACCESS_MANAGED
         )
 
         manager.addCrossProfileIntentFilter(

@@ -16,13 +16,13 @@ import android.os.Bundle
 import android.os.IBinder
 import android.os.RemoteException
 import android.os.StrictMode
+import android.util.Log
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
 import net.typeblog.shelter.R
 import net.typeblog.shelter.ShelterApplication
 import net.typeblog.shelter.receivers.ShelterDeviceAdminReceiver
-import net.typeblog.shelter.services.AntiSpyVpnWatchService
 import net.typeblog.shelter.services.FreezeService
 import net.typeblog.shelter.services.IAppInstallCallback
 import net.typeblog.shelter.services.IFileShuttleService
@@ -543,7 +543,12 @@ class DummyActivity : Activity() {
 
     private fun actionPublicFreezeAll() {
         if (!isProfileOwner) {
-            Utility.launchFreezeInWorkProfile(this, AntiSpyManager.getAutoFreezeList())
+            val vpnAutoFreeze = intent.getBooleanExtra(AntiSpyManager.EXTRA_VPN_AUTO_FREEZE, false)
+            Utility.launchFreezeInWorkProfile(
+                this,
+                AntiSpyManager.getAutoFreezeList(),
+                vpnAutoFreeze,
+            )
             finish()
         } else {
             throw RuntimeException("unimplemented")
@@ -570,9 +575,20 @@ class DummyActivity : Activity() {
                 finish()
                 return
             }
+            val normalized = Utility.normalizeStringList(list)
+            if (normalized.isNotEmpty()) {
+                LocalStorageManager.getInstance().setStringList(
+                    LocalStorageManager.PREF_AUTO_FREEZE_LIST_WORK_PROFILE,
+                    normalized,
+                )
+            }
             val frozen = WorkProfileBatchFreeze.freezeList(this, list)
             if (frozen > 0) {
-                Toast.makeText(this, R.string.freeze_all_success, Toast.LENGTH_SHORT).show()
+                if (intent.getBooleanExtra(AntiSpyManager.EXTRA_VPN_AUTO_FREEZE, false)) {
+                    Utility.postVpnAutoFreezeSuccessAlert(this)
+                } else {
+                    Toast.makeText(this, R.string.freeze_all_success, Toast.LENGTH_SHORT).show()
+                }
                 Utility.scheduleAppListRefresh(this)
             }
             finish()
@@ -593,6 +609,7 @@ class DummyActivity : Activity() {
             }
             stopService(Intent(this, FreezeService::class.java))
             Toast.makeText(this, R.string.unfreeze_all_success, Toast.LENGTH_SHORT).show()
+            Utility.scheduleAppListRefresh(this)
             finish()
         } else {
             finish()
@@ -678,9 +695,9 @@ class DummyActivity : Activity() {
                 val list = intent.getStringArrayExtra(AntiSpyManager.EXTRA_AUTO_FREEZE_LIST)
                 if (list != null) {
                     storage.setStringList(LocalStorageManager.PREF_AUTO_FREEZE_LIST_WORK_PROFILE, list)
+                    Log.i("AntiSpyManager", "work profile auto-freeze list synced: ${list.size} apps")
                 }
             }
-            AntiSpyVpnWatchService.syncState(this)
         }
         finish()
     }

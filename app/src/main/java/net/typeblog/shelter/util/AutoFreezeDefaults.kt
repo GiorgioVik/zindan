@@ -30,7 +30,7 @@ object AutoFreezeDefaults {
     fun enableForWorkProfile(context: Context?, packageName: String?) {
         enableForWorkProfile(packageName)
         if (context != null) {
-            AntiSpyManager.syncAutoFreezeListToWorkProfile(context.applicationContext)
+            AntiSpyManager.syncAutoFreezeListToWorkProfile(context.applicationContext, force = true)
         }
     }
 
@@ -51,7 +51,7 @@ object AutoFreezeDefaults {
             enableForWorkProfile(pkg)
         }
         if (context != null) {
-            AntiSpyManager.syncAutoFreezeListToWorkProfile(context.applicationContext)
+            AntiSpyManager.syncAutoFreezeListToWorkProfile(context.applicationContext, force = true)
         }
     }
 

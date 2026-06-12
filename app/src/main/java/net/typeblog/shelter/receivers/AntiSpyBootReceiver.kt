@@ -19,6 +19,6 @@ class AntiSpyBootReceiver : BroadcastReceiver() {
         LocalStorageManager.initialize(app)
         val storage = LocalStorageManager.getInstance()
         AntiSpyManager.onDeviceBoot(storage)
-        AntiSpyManager.syncVpnWatchEverywhere(app)
+        AntiSpyManager.syncVpnWatchEverywhere(app, forceListSync = true)
     }
 }

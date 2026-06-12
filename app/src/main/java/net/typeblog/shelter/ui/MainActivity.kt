@@ -39,6 +39,7 @@ import net.typeblog.shelter.ShelterApplication
 import net.typeblog.shelter.services.IAppInstallCallback
 import net.typeblog.shelter.services.IShelterService
 import net.typeblog.shelter.services.IStartActivityProxy
+import net.typeblog.shelter.services.AntiSpyVpnWatchService
 import net.typeblog.shelter.services.KillerService
 import net.typeblog.shelter.util.AntiSpyLaunchGate
 import net.typeblog.shelter.util.AntiSpyManager
@@ -103,6 +104,15 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private var mainAppListFragment: AppListFragment? = null
+    private var workAppListFragment: AppListFragment? = null
+
+    private val appListRefreshReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            refreshAppLists()
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
@@ -124,6 +134,11 @@ class MainActivity : AppCompatActivity() {
             .registerReceiver(
                 antiSpyVpnBlockReceiver,
                 IntentFilter(AntiSpyLaunchGate.BROADCAST_LAUNCH_BLOCKED_VPN)
+            )
+        LocalBroadcastManager.getInstance(this)
+            .registerReceiver(
+                appListRefreshReceiver,
+                IntentFilter(AppListFragment.BROADCAST_REFRESH)
             )
 
         if (getSystemService(DevicePolicyManager::class.java).isProfileOwnerApp(packageName)) {
@@ -206,7 +221,7 @@ class MainActivity : AppCompatActivity() {
             startKiller()
             window.decorView.post {
                 runAntiSpyStartupFreezeIfNeeded()
-                AntiSpyManager.syncVpnWatchEverywhere(this@MainActivity)
+                AntiSpyManager.syncVpnWatchEverywhere(this@MainActivity, forceListSync = true)
             }
             buildView()
         }
@@ -219,7 +234,7 @@ class MainActivity : AppCompatActivity() {
         }
         AntiSpyManager.clearStartupFreezePending(s)
         AntiSpyManager.runBatchFreezeAll(this)
-        AntiSpyManager.syncVpnWatchEverywhere(this)
+        AntiSpyManager.syncVpnWatchEverywhere(this, forceListSync = true)
     }
 
     private fun startKiller() {
@@ -238,13 +253,14 @@ class MainActivity : AppCompatActivity() {
 
         pager.adapter = object : FragmentStateAdapter(this) {
             override fun createFragment(position: Int): Fragment = when (position) {
-                0 -> AppListFragment.newInstance(serviceMain!!, false)
-                1 -> AppListFragment.newInstance(serviceWork!!, true)
+                0 -> AppListFragment.newInstance(serviceMain!!, false).also { mainAppListFragment = it }
+                1 -> AppListFragment.newInstance(serviceWork!!, true).also { workAppListFragment = it }
                 else -> throw RuntimeException("How did this happen?")
             }
 
             override fun getItemCount(): Int = 2
         }
+        pager.offscreenPageLimit = 2
         pager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
             override fun onPageSelected(position: Int) {
                 val menuIds = intArrayOf(
@@ -302,7 +318,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        AntiSpyManager.syncVpnWatchEverywhere(this)
+        AntiSpyVpnWatchService.syncState(this)
         if (pendingVpnBlockReason != 0) {
             val reason = pendingVpnBlockReason
             pendingVpnBlockReason = 0
@@ -320,6 +336,8 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         LocalBroadcastManager.getInstance(this)
             .unregisterReceiver(antiSpyVpnBlockReceiver)
+        LocalBroadcastManager.getInstance(this)
+            .unregisterReceiver(appListRefreshReceiver)
         super.onDestroy()
         if (!restarting) {
             doOnDestroy()
@@ -432,7 +450,7 @@ class MainActivity : AppCompatActivity() {
                 }
                 DummyActivity.registerSameProcessRequest(unfreezeIntent)
                 startActivity(unfreezeIntent)
-                refreshAppLists()
+                Utility.scheduleAppListRefresh(this)
                 true
             }
             R.id.main_menu_freeze_all -> {
@@ -441,7 +459,7 @@ class MainActivity : AppCompatActivity() {
                 }
                 DummyActivity.registerSameProcessRequest(intent)
                 startActivity(intent)
-                refreshAppLists()
+                Utility.scheduleAppListRefresh(this)
                 true
             }
             R.id.main_menu_settings -> {
@@ -485,8 +503,7 @@ class MainActivity : AppCompatActivity() {
                 val update = Runnable {
                     showAll = !item.isChecked
                     item.isChecked = showAll
-                    LocalBroadcastManager.getInstance(this)
-                        .sendBroadcast(Intent(AppListFragment.BROADCAST_REFRESH))
+                    refreshAppLists()
                 }
                 if (!item.isChecked) {
                     AlertDialog.Builder(this)
@@ -510,9 +527,21 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun refreshAppLists() {
-        LocalBroadcastManager.getInstance(this)
-            .sendBroadcast(Intent(AppListFragment.BROADCAST_REFRESH))
+    fun refreshAppLists() {
+        val fragments = LinkedHashSet<AppListFragment>()
+        mainAppListFragment?.let { fragments.add(it) }
+        workAppListFragment?.let { fragments.add(it) }
+        for (tag in APP_LIST_FRAGMENT_TAGS) {
+            (supportFragmentManager.findFragmentByTag(tag) as? AppListFragment)?.let { fragments.add(it) }
+        }
+        for (fragment in fragments) {
+            fragment.refresh()
+        }
+    }
+
+    fun scheduleAppListRefresh() {
+        refreshAppLists()
+        Utility.scheduleAppListRefresh(this)
     }
 
     private fun onApkSelected(uri: Uri?) {
@@ -528,6 +557,7 @@ class MainActivity : AppCompatActivity() {
                                 R.string.install_app_to_profile_success,
                                 Toast.LENGTH_LONG
                             ).show()
+                            scheduleAppListRefresh()
                         }
                     }
                 }
@@ -541,5 +571,6 @@ class MainActivity : AppCompatActivity() {
             "net.typeblog.shelter.broadcast.CONTEXT_MENU_CLOSED"
         const val BROADCAST_SEARCH_FILTER_CHANGED =
             "net.typeblog.shelter.broadcast.SEARCH_FILTER_CHANGED"
+        private val APP_LIST_FRAGMENT_TAGS = arrayOf("f0", "f1")
     }
 }

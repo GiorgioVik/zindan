@@ -21,26 +21,28 @@ import android.util.Log
 import net.typeblog.shelter.R
 import net.typeblog.shelter.util.AntiSpyDummyVpnDisconnector
 import net.typeblog.shelter.util.AntiSpyManager
-import net.typeblog.shelter.util.AntiSpyVpnPromptManager
 import net.typeblog.shelter.util.LocalStorageManager
 import net.typeblog.shelter.util.Utility
 import net.typeblog.shelter.util.VpnTunnelDetector
+import net.typeblog.shelter.util.WorkProfileBatchFreeze
 
 /**
- * Scenario 2: external VPN up → notify → dummy displacement → full-screen freeze prompt.
- * VPN state edges use MacroDroid VpnTrigger-style reconcile.
+ * Scenario 2: app running → external VPN up → notify (main) → batch-freeze (work profile).
+ * Freeze runs inside the work-profile `:vpnwatch` process (local DPM; no cross-profile hop).
  */
 class AntiSpyVpnWatchService : Service() {
     private var connectivityManager: ConnectivityManager? = null
     private var vpnCallback: ConnectivityManager.NetworkCallback? = null
     private var defaultCallback: ConnectivityManager.NetworkCallback? = null
     private val handler = Handler(Looper.getMainLooper())
-    private val scenario2Runnable = Runnable { runScenario2AfterVpnUp() }
+    private val autoFreezeRunnable = Runnable { runAutoFreezeOnVpnUp(retry = false) }
     private val pollRunnable = Runnable { pollVpnState() }
     private var vpnPresent = false
-    private var scenario2Running = false
     private var foregroundStarted = false
     private var connectivityReceiver: BroadcastReceiver? = null
+
+    private var autoFreezeRetryPending = false
+    private val autoFreezeRetryRunnable = Runnable { runAutoFreezeOnVpnUp(retry = true) }
 
     override fun onCreate() {
         super.onCreate()
@@ -155,8 +157,8 @@ class AntiSpyVpnWatchService : Service() {
     }
 
     private fun reconcileVpnState(source: String) {
-        if (AntiSpyDummyVpnDisconnector.isSuppressingVpnReactions() || scenario2Running) {
-            Log.d(TAG, "reconcile skipped ($source): displacement in progress")
+        if (AntiSpyDummyVpnDisconnector.isSuppressingVpnReactions()) {
+            Log.d(TAG, "reconcile skipped ($source): launch-gate dummy VPN cycle")
             return
         }
         val active = VpnTunnelDetector.isVpnActive(this)
@@ -171,20 +173,25 @@ class AntiSpyVpnWatchService : Service() {
 
     private fun onVpnStateChanged(vpnActive: Boolean) {
         vpnPresent = vpnActive
-        handler.removeCallbacks(scenario2Runnable)
+        handler.removeCallbacks(autoFreezeRunnable)
         if (!vpnActive) {
-            AntiSpyVpnPromptManager.onVpnSessionEnded()
-            scenario2Running = false
             if (isMainProfileWatcher()) {
                 postVpnStateAlert(R.string.anti_spy_vpn_alert_disconnected_text)
             }
             return
         }
-        if (!isMainProfileWatcher()) {
-            return
+        if (isMainProfileWatcher()) {
+            postVpnStateAlert(R.string.anti_spy_vpn_alert_connected_text)
+            val list = AntiSpyManager.getAutoFreezeList(this)
+            if (list.isNotEmpty()) {
+                AntiSpyManager.syncAutoFreezeListToWorkProfile(this, force = true)
+                Utility.scheduleFreezeInWorkProfile(this, list)
+            } else {
+                Log.w(TAG, "VPN up: main auto-freeze list is empty")
+            }
+        } else {
+            handler.postDelayed(autoFreezeRunnable, AUTO_FREEZE_DEBOUNCE_MS)
         }
-        postVpnStateAlert(R.string.anti_spy_vpn_alert_connected_text)
-        handler.postDelayed(scenario2Runnable, SCENARIO2_DEBOUNCE_MS)
     }
 
     private fun postVpnStateAlert(textResId: Int) {
@@ -193,47 +200,39 @@ class AntiSpyVpnWatchService : Service() {
         Utility.postUserAlert(this, VPN_STATE_NOTIFICATION_ID, title, text)
     }
 
-    private fun runScenario2AfterVpnUp() {
-        if (!isMainProfileWatcher()) {
-            return
-        }
-        if (AntiSpyDummyVpnDisconnector.isSuppressingVpnReactions()) {
-            Log.d(TAG, "scenario2 skipped: dummy vpn cycle")
-            return
-        }
-        if (AntiSpyVpnPromptManager.isPromptActive()) {
-            Log.d(TAG, "scenario2 skipped: prompt already showing")
-            return
-        }
-        if (AntiSpyVpnPromptManager.isDeclinedForCurrentVpnSession()) {
-            Log.d(TAG, "scenario2 skipped: user declined this VPN session")
+    private fun runAutoFreezeOnVpnUp(retry: Boolean) {
+        if (isMainProfileWatcher()) {
             return
         }
         if (!VpnTunnelDetector.isVpnActive(this)) {
-            Log.d(TAG, "scenario2 cancelled: vpn no longer active")
+            Log.d(TAG, "auto-freeze cancelled: vpn no longer active")
             vpnPresent = false
+            autoFreezeRetryPending = false
             return
         }
-        scenario2Running = true
+        val list = AntiSpyManager.getAutoFreezeList(this)
+        if (list.isEmpty()) {
+            if (!retry && !autoFreezeRetryPending) {
+                autoFreezeRetryPending = true
+                Log.w(TAG, "auto-freeze: work list empty, retry in ${AUTO_FREEZE_RETRY_MS}ms")
+                handler.postDelayed(autoFreezeRetryRunnable, AUTO_FREEZE_RETRY_MS)
+                return
+            }
+            Log.w(TAG, "auto-freeze skipped: auto-freeze list is empty in work profile")
+            autoFreezeRetryPending = false
+            return
+        }
+        autoFreezeRetryPending = false
+        handler.removeCallbacks(autoFreezeRetryRunnable)
         VpnTunnelDetector.logDiagnostics(this)
-        Log.i(TAG, "scenario2: dummy displacement then freeze prompt")
-        AntiSpyDummyVpnDisconnector.tryClearVpnAsync(this) { result ->
-            scenario2Running = false
-            if (AntiSpyVpnPromptManager.isDeclinedForCurrentVpnSession()) {
-                return@tryClearVpnAsync
-            }
-            if (AntiSpyVpnPromptManager.isPromptActive()) {
-                return@tryClearVpnAsync
-            }
-            Log.i(TAG, "scenario2 displacement result=$result")
-            when (result) {
-                AntiSpyDummyVpnDisconnector.RESULT_CLEARED ->
-                    AntiSpyVpnPromptManager.showFreezePromptAfterDisplacement(this)
-                AntiSpyDummyVpnDisconnector.RESULT_VPN_PERMISSION_REQUIRED ->
-                    AntiSpyVpnPromptManager.showVpnPermissionNeeded(this)
-                else ->
-                    AntiSpyVpnPromptManager.showDisplacementFailed(this)
-            }
+        Log.i(TAG, "auto-freeze in work profile on VPN up: ${list.size} apps (VPN stays active)")
+        val frozen = WorkProfileBatchFreeze.freezeList(this, list)
+        if (frozen > 0) {
+            Utility.postVpnAutoFreezeSuccessAlert(this)
+            Utility.scheduleAppListRefresh(this)
+            Log.i(TAG, "auto-freeze done: $frozen apps hidden")
+        } else {
+            Log.w(TAG, "auto-freeze: freezeList returned 0")
         }
     }
 
@@ -246,7 +245,8 @@ class AntiSpyVpnWatchService : Service() {
     override fun onDestroy() {
         Log.i(TAG, "onDestroy")
         scheduleRestartIfNeeded()
-        handler.removeCallbacks(scenario2Runnable)
+        handler.removeCallbacks(autoFreezeRunnable)
+        handler.removeCallbacks(autoFreezeRetryRunnable)
         handler.removeCallbacks(pollRunnable)
         connectivityReceiver?.let { receiver ->
             try {
@@ -295,10 +295,19 @@ class AntiSpyVpnWatchService : Service() {
             }
             val am = app.getSystemService(AlarmManager::class.java) ?: return
             val trigger = SystemClock.elapsedRealtime() + 1500
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                am.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, trigger, pi)
-            } else {
-                am.set(AlarmManager.ELAPSED_REALTIME_WAKEUP, trigger, pi)
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    am.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, trigger, pi)
+                } else {
+                    am.set(AlarmManager.ELAPSED_REALTIME_WAKEUP, trigger, pi)
+                }
+            } catch (e: SecurityException) {
+                Log.w(TAG, "exact restart alarm denied, using inexact", e)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                    am.setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, trigger, pi)
+                } else {
+                    am.set(AlarmManager.ELAPSED_REALTIME_WAKEUP, trigger, pi)
+                }
             }
             Log.i(TAG, "restart scheduled via AlarmManager")
         } catch (e: Exception) {
@@ -312,10 +321,20 @@ class AntiSpyVpnWatchService : Service() {
         private const val TAG = "AntiSpyVpnWatch"
         private const val NOTIFICATION_ID = 0xe49d0
         private const val VPN_STATE_NOTIFICATION_ID = 0xe49d1
-        private const val SCENARIO2_DEBOUNCE_MS = 1500L
+        private const val AUTO_FREEZE_DEBOUNCE_MS = 2500L
+        private const val AUTO_FREEZE_RETRY_MS = 2000L
         private const val VPN_POLL_MS = 2000L
+        private const val SYNC_STATE_COOLDOWN_MS = 3000L
+
+        @Volatile
+        private var lastSyncStateElapsed = 0L
 
         fun syncState(context: Context) {
+            val now = SystemClock.elapsedRealtime()
+            if (now - lastSyncStateElapsed < SYNC_STATE_COOLDOWN_MS) {
+                return
+            }
+            lastSyncStateElapsed = now
             val app = context.applicationContext
             val intent = Intent(app, AntiSpyVpnWatchService::class.java)
             try {

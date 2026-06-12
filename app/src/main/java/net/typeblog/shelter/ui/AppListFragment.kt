@@ -58,12 +58,7 @@ class AppListFragment : BaseFragment() {
     private var adapter: AppListAdapter? = null
     private var swipeRefresh: SwipeRefreshLayout? = null
     private var actionMode: ActionMode? = null
-
-    private val refreshReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            refresh()
-        }
-    }
+    private var refreshPending = false
 
     private val searchReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -86,8 +81,6 @@ class AppListFragment : BaseFragment() {
     override fun onResume() {
         super.onResume()
         LocalBroadcastManager.getInstance(requireContext())
-            .registerReceiver(refreshReceiver, IntentFilter(BROADCAST_REFRESH))
-        LocalBroadcastManager.getInstance(requireContext())
             .registerReceiver(
                 searchReceiver,
                 IntentFilter(MainActivity.BROADCAST_SEARCH_FILTER_CHANGED)
@@ -98,8 +91,6 @@ class AppListFragment : BaseFragment() {
     override fun onPause() {
         super.onPause()
         selectedApp = null
-        LocalBroadcastManager.getInstance(requireContext())
-            .unregisterReceiver(refreshReceiver)
         LocalBroadcastManager.getInstance(requireContext())
             .unregisterReceiver(searchReceiver)
     }
@@ -286,7 +277,7 @@ class AppListFragment : BaseFragment() {
                     getString(R.string.freeze_success, app.getLabel()),
                     Toast.LENGTH_SHORT
                 ).show()
-                refresh()
+                requestAppListRefresh()
             }
             MENU_ITEM_UNFREEZE -> {
                 try {
@@ -298,7 +289,7 @@ class AppListFragment : BaseFragment() {
                     getString(R.string.unfreeze_success, app.getLabel()),
                     Toast.LENGTH_SHORT
                 ).show()
-                refresh()
+                requestAppListRefresh()
             }
             MENU_ITEM_LAUNCH -> {
                 val intent = Intent(DummyActivity.UNFREEZE_AND_LAUNCH).apply {
@@ -317,10 +308,9 @@ class AppListFragment : BaseFragment() {
                     LocalStorageManager.getInstance().removeFromStringList(
                         LocalStorageManager.PREF_AUTO_FREEZE_LIST_WORK_PROFILE, app.getPackageName()
                     )
-                    AntiSpyManager.syncAutoFreezeListToWorkProfile(requireContext())
+                    AntiSpyManager.syncAutoFreezeListToWorkProfile(requireContext(), force = true)
                 }
-                LocalBroadcastManager.getInstance(requireContext())
-                    .sendBroadcast(Intent(BROADCAST_REFRESH))
+                requestAppListRefresh()
             }
             MENU_ITEM_ALLOW_CROSS_PROFILE_WIDGET -> {
                 val newState = !checked
@@ -350,9 +340,17 @@ class AppListFragment : BaseFragment() {
         }
     }
 
+    private fun requestAppListRefresh() {
+        (activity as? MainActivity)?.scheduleAppListRefresh()
+            ?: Utility.scheduleAppListRefresh(requireContext())
+    }
+
     fun refresh() {
         if (adapter == null) return
-        if (refreshing) return
+        if (refreshing) {
+            refreshPending = true
+            return
+        }
         if (adapter!!.isMultiSelectMode()) {
             swipeRefresh!!.isRefreshing = false
             return
@@ -400,7 +398,6 @@ class AppListFragment : BaseFragment() {
                             knownWorkProfilePackages, currentPackages
                         )
                         knownWorkProfilePackages = currentSet
-                        AntiSpyManager.syncAutoFreezeListToWorkProfile(requireContext())
                         autoFreezePackages = HashSet(
                             LocalStorageManager.getInstance()
                                 .getStringList(LocalStorageManager.PREF_AUTO_FREEZE_LIST_WORK_PROFILE)
@@ -409,16 +406,26 @@ class AppListFragment : BaseFragment() {
                     }
                     val freezePackages = autoFreezePackages
                     runOnUiThread {
+                        if (!isAdded) {
+                            refreshing = false
+                            return@runOnUiThread
+                        }
                         swipeRefresh!!.isRefreshing = false
                         adapter!!.setData(apps)
                         if (freezePackages != null) {
                             adapter!!.setAutoFreezePackages(freezePackages)
                         }
                         refreshing = false
+                        if (refreshPending) {
+                            refreshPending = false
+                            refresh()
+                        }
                     }
                 }
             }, (activity as MainActivity).showAll)
         } catch (_: RemoteException) {
+            refreshing = false
+            swipeRefresh!!.isRefreshing = false
         }
     }
 
@@ -493,8 +500,7 @@ class AppListFragment : BaseFragment() {
                     app.getPackageName()
                 )
             }
-            LocalBroadcastManager.getInstance(requireContext())
-                .sendBroadcast(Intent(BROADCAST_REFRESH))
+            requestAppListRefresh()
         } else if (result == ShelterService.RESULT_CANNOT_INSTALL_SYSTEM_APP) {
             Toast.makeText(
                 requireContext(),

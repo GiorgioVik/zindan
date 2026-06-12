@@ -4,6 +4,7 @@ import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.os.SystemClock
 import android.util.Log
 import net.typeblog.shelter.services.AntiSpyVpnWatchService
 import net.typeblog.shelter.ui.DummyActivity
@@ -13,8 +14,22 @@ import net.typeblog.shelter.ui.DummyActivity
  */
 object AntiSpyManager {
     private const val TAG = "AntiSpyManager"
+    private const val LIST_SYNC_COOLDOWN_MS = 60_000L
+    private const val LIST_SYNC_FORCE_MIN_MS = 5_000L
+    private const val VPN_WATCH_EVERYWHERE_COOLDOWN_MS = 30_000L
+
+    @Volatile
+    private var lastListSyncElapsed = 0L
+
+    @Volatile
+    private var lastListSyncHash = 0
+
+    @Volatile
+    private var lastVpnWatchEverywhereElapsed = 0L
 
     const val EXTRA_AUTO_FREEZE_LIST = "auto_freeze_list"
+    /** Set when batch-freeze is triggered by VPN-up (scenario 2). */
+    const val EXTRA_VPN_AUTO_FREEZE = "anti_spy_vpn_auto_freeze"
 
     /** How to reach the work profile when freezing the auto-freeze list. */
     enum class AutoFreezeDelivery {
@@ -25,33 +40,69 @@ object AntiSpyManager {
         BACKGROUND
     }
 
-    /** Push auto-freeze list + VPN watcher state into the work profile. */
-    fun syncAutoFreezeListToWorkProfile(context: Context) {
+    /** Push auto-freeze list into the work profile. Skips if unchanged within [LIST_SYNC_COOLDOWN_MS]. */
+    fun syncAutoFreezeListToWorkProfile(context: Context, force: Boolean = false) {
         if (isWorkProfile(context)) {
             return
         }
+        val app = context.applicationContext
+        LocalStorageManager.initialize(app)
         if (!LocalStorageManager.getInstance().getBoolean(LocalStorageManager.PREF_HAS_SETUP)) {
             return
         }
+        val list = getAutoFreezeList(app)
+        if (list.isEmpty()) {
+            Log.w(TAG, "sync auto-freeze list to work: main list is empty")
+            return
+        }
+        val listHash = list.contentHashCode()
+        val now = SystemClock.elapsedRealtime()
+        val elapsed = now - lastListSyncElapsed
+        if (listHash == lastListSyncHash) {
+            val limit = if (force) LIST_SYNC_FORCE_MIN_MS else LIST_SYNC_COOLDOWN_MS
+            if (elapsed < limit) {
+                Log.d(TAG, "sync auto-freeze list skipped (unchanged, ${elapsed}ms < ${limit}ms)")
+                return
+            }
+        }
+        lastListSyncHash = listHash
+        lastListSyncElapsed = now
         try {
-            val intent = workSyncIntent(context)
-            context.startActivity(intent)
-        } catch (e: IllegalStateException) {
+            val intent = workSyncIntent(context, list)
+            try {
+                app.startActivity(intent)
+                Log.d(TAG, "sync auto-freeze list to work (${list.size} apps) via activity")
+            } catch (e: IllegalStateException) {
+                Log.w(TAG, "sync auto-freeze list activity blocked, trying alarm", e)
+                if (Utility.scheduleCrossProfileActivity(app, intent, 0xE49E3)) {
+                    Log.i(TAG, "sync auto-freeze list scheduled (${list.size} apps)")
+                } else {
+                    Log.w(TAG, "sync auto-freeze list alarm failed")
+                }
+            }
+        } catch (e: Exception) {
             Log.w(TAG, "sync auto-freeze list to work failed", e)
         }
     }
 
-    /** Start/stop VPN watcher in main and work profiles. */
-    fun syncVpnWatchEverywhere(context: Context) {
+    /** Ensure VPN watcher is running; push auto-freeze list at most once per cooldown. */
+    fun syncVpnWatchEverywhere(context: Context, forceListSync: Boolean = false) {
         AntiSpyVpnWatchService.syncState(context)
-        if (!isWorkProfile(context)) {
-            syncAutoFreezeListToWorkProfile(context)
+        if (isWorkProfile(context)) {
+            return
         }
+        val now = SystemClock.elapsedRealtime()
+        if (!forceListSync && now - lastVpnWatchEverywhereElapsed < VPN_WATCH_EVERYWHERE_COOLDOWN_MS) {
+            Log.d(TAG, "syncVpnWatchEverywhere: list sync skipped (cooldown)")
+            return
+        }
+        lastVpnWatchEverywhereElapsed = now
+        syncAutoFreezeListToWorkProfile(context, force = forceListSync)
     }
 
-    private fun workSyncIntent(context: Context): Intent {
+    private fun workSyncIntent(context: Context, list: Array<String>? = null): Intent {
         val intent = Intent(DummyActivity.SYNC_ANTI_SPY_VPN_WATCH)
-        intent.putExtra(EXTRA_AUTO_FREEZE_LIST, getAutoFreezeList())
+        intent.putExtra(EXTRA_AUTO_FREEZE_LIST, list ?: getAutoFreezeList(context))
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         Utility.transferIntentToProfile(context, intent)
         AuthenticationUtility.signIntent(intent)
@@ -145,9 +196,28 @@ object AntiSpyManager {
         freezeAutoFreezeList(context, AutoFreezeDelivery.FOREGROUND)
     }
 
-    /** VPN watcher in main or work profile. */
-    fun freezeAllForVpn(context: Context) {
-        freezeAutoFreezeList(context, AutoFreezeDelivery.BACKGROUND)
+    /**
+     * VPN watcher (scenario 2). In the work profile, freeze locally via DPM.
+     * From the main profile, cross-profile delivery is blocked without system permissions —
+     * the work-profile [AntiSpyVpnWatchService] performs the freeze instead.
+     */
+    fun freezeAllForVpn(context: Context): Boolean {
+        val app = context.applicationContext
+        val list = getAutoFreezeList(app)
+        if (list.isEmpty()) {
+            Log.w(TAG, "auto-freeze on VPN: list is empty")
+            return false
+        }
+        if (isWorkProfile(app)) {
+            val frozen = WorkProfileBatchFreeze.freezeList(app, list)
+            Log.i(TAG, "auto-freeze on VPN in work: $frozen apps")
+            if (frozen > 0) {
+                Utility.scheduleAppListRefresh(app)
+            }
+            return frozen > 0
+        }
+        Log.d(TAG, "auto-freeze on VPN: main profile — work watcher handles freeze")
+        return false
     }
 
     fun isWorkProfile(context: Context): Boolean {

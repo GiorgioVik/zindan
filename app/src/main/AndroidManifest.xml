@@ -10,6 +10,7 @@
     <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SYSTEM_EXEMPTED" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:maxSdkVersion="25"
         android:name="com.android.launcher.permission.INSTALL_SHORTCUT" />
     <uses-permission android:maxSdkVersion="25"
@@ -198,7 +199,11 @@
             android:exported="false"
             android:process=":vpnwatch"
             android:stopWithTask="false"
-            android:foregroundServiceType="systemExempted" />
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="anti_spy_vpn_monitoring" />
+        </service>
 
         <service android:name=".services.BatchFreezeService"
             android:exported="false"
