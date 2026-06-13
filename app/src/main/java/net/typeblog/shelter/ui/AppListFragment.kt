@@ -23,7 +23,7 @@ import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
-import android.widget.Toast
+import net.typeblog.shelter.util.ZindanToast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.view.ActionMode
@@ -281,11 +281,10 @@ class AppListFragment : BaseFragment() {
                     service!!.freezeApp(app)
                 } catch (_: RemoteException) {
                 }
-                Toast.makeText(
+                ZindanToast.show(
                     requireContext(),
                     getString(R.string.freeze_success, app.getLabel()),
-                    Toast.LENGTH_SHORT
-                ).show()
+                )
                 refresh()
             }
             MENU_ITEM_UNFREEZE -> {
@@ -293,11 +292,10 @@ class AppListFragment : BaseFragment() {
                     service!!.unfreezeApp(app)
                 } catch (_: RemoteException) {
                 }
-                Toast.makeText(
+                ZindanToast.show(
                     requireContext(),
                     getString(R.string.unfreeze_success, app.getLabel()),
-                    Toast.LENGTH_SHORT
-                ).show()
+                )
                 refresh()
             }
             MENU_ITEM_LAUNCH -> {
@@ -479,7 +477,7 @@ class AppListFragment : BaseFragment() {
         if (result == Activity.RESULT_OK) {
             var message = getString(if (isInstall) R.string.clone_success else R.string.uninstall_success)
             message = String.format(message, app.getLabel())
-            Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show()
+            ZindanToast.show(requireContext(), message)
             if (isInstall && !isRemote) {
                 AutoFreezeDefaults.enableForWorkProfile(requireContext(), app.getPackageName())
             }
@@ -496,13 +494,12 @@ class AppListFragment : BaseFragment() {
             LocalBroadcastManager.getInstance(requireContext())
                 .sendBroadcast(Intent(BROADCAST_REFRESH))
         } else if (result == ShelterService.RESULT_CANNOT_INSTALL_SYSTEM_APP) {
-            Toast.makeText(
+            ZindanToast.show(
                 requireContext(),
                 getString(
                     if (isInstall) R.string.clone_fail_system_app else R.string.uninstall_fail_system_app
                 ),
-                Toast.LENGTH_SHORT
-            ).show()
+            )
         }
     }
 

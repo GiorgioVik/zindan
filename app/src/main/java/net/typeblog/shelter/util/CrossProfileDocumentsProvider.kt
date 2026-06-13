@@ -90,7 +90,7 @@ class CrossProfileDocumentsProvider : DocumentsProvider() {
         val row = result.newRow()
         row.add(DocumentsContract.Root.COLUMN_ROOT_ID, DUMMY_ROOT)
         row.add(DocumentsContract.Root.COLUMN_DOCUMENT_ID, DUMMY_ROOT)
-        row.add(DocumentsContract.Root.COLUMN_ICON, R.mipmap.ic_launcher_egg)
+        row.add(DocumentsContract.Root.COLUMN_ICON, R.mipmap.ic_launcher_zindan)
         row.add(
             DocumentsContract.Root.COLUMN_TITLE,
             if (Utility.isProfileOwner(context!!)) {

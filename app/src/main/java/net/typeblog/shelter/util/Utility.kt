@@ -35,7 +35,6 @@ import android.os.UserManager
 import android.provider.MediaStore
 import android.provider.Settings
 import android.util.Log
-import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContract
 import androidx.annotation.NonNull
 import androidx.annotation.Nullable
@@ -765,11 +764,11 @@ object Utility {
                     ).intentSender
                 )
             } else {
-                Toast.makeText(
+                ZindanToast.show(
                     context,
                     context.getString(R.string.unsupported_launcher),
-                    Toast.LENGTH_LONG
-                ).show()
+                    android.widget.Toast.LENGTH_LONG,
+                )
             }
         } else {
             val shortcutIntent = Intent("com.android.launcher.action.INSTALL_SHORTCUT")
@@ -780,7 +779,7 @@ object Utility {
                 drawableToBitmap(icon.loadDrawable(context)!!)
             )
             context.sendBroadcast(shortcutIntent)
-            Toast.makeText(context, R.string.shortcut_create_success, Toast.LENGTH_SHORT).show()
+            ZindanToast.show(context, R.string.shortcut_create_success)
         }
     }
 
@@ -876,6 +875,70 @@ object Utility {
 
     private const val NOTIFICATION_CHANNEL_ID = "ShelterService"
     private const val NOTIFICATION_CHANNEL_IMPORTANT = "ShelterService-Important"
+    private const val NOTIFICATION_CHANNEL_USER_ALERTS = "ShelterUserAlerts"
+    private const val VPN_AUTO_FREEZE_SUCCESS_NOTIFICATION_ID = 0xe49d3
+
+    fun postUserAlert(
+        context: Context,
+        notificationId: Int,
+        title: String,
+        text: String,
+        icon: Int = R.drawable.ic_lock_open_white_24dp,
+    ) {
+        val app = context.applicationContext
+        app.getSystemService(NotificationManager::class.java).notify(
+            notificationId,
+            buildUserAlertNotification(app, title, text, icon),
+        )
+    }
+
+    fun postVpnAutoFreezeSuccessAlert(context: Context) {
+        val app = context.applicationContext
+        postUserAlert(
+            app,
+            VPN_AUTO_FREEZE_SUCCESS_NOTIFICATION_ID,
+            app.getString(R.string.anti_spy_monitor_notification_title),
+            app.getString(R.string.freeze_all_success),
+        )
+    }
+
+    fun buildUserAlertNotification(
+        context: Context,
+        title: String,
+        text: String,
+        icon: Int = R.drawable.ic_lock_open_white_24dp,
+    ): Notification {
+        val app = context.applicationContext
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val nm = app.getSystemService(NotificationManager::class.java)
+            if (nm.getNotificationChannel(NOTIFICATION_CHANNEL_USER_ALERTS) == null) {
+                val chan = NotificationChannel(
+                    NOTIFICATION_CHANNEL_USER_ALERTS,
+                    app.getString(R.string.notifications_important),
+                    NotificationManager.IMPORTANCE_HIGH,
+                )
+                chan.enableVibration(true)
+                nm.createNotificationChannel(chan)
+            }
+            return Notification.Builder(app, NOTIFICATION_CHANNEL_USER_ALERTS)
+                .setContentTitle(title)
+                .setContentText(text)
+                .setStyle(Notification.BigTextStyle().bigText(text))
+                .setSmallIcon(icon)
+                .setAutoCancel(true)
+                .setOnlyAlertOnce(true)
+                .setCategory(Notification.CATEGORY_STATUS)
+                .build()
+        }
+        return Notification.Builder(app)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setStyle(Notification.BigTextStyle().bigText(text))
+            .setSmallIcon(icon)
+            .setPriority(Notification.PRIORITY_MAX)
+            .setAutoCancel(true)
+            .build()
+    }
 
     fun buildNotification(
         context: Context,

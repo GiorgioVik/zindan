@@ -26,6 +26,7 @@ import net.typeblog.shelter.util.AntiSpyVpnPromptManager
 import net.typeblog.shelter.util.LocalStorageManager
 import net.typeblog.shelter.util.Utility
 import net.typeblog.shelter.util.VpnTunnelDetector
+import net.typeblog.shelter.util.ZindanToast
 
 /**
  * Background VPN watcher while Anti Spy (golden shield) is on.
@@ -65,8 +66,7 @@ class AntiSpyVpnWatchService : Service() {
                 onVpnStateChanged(true)
             }
         } else if (!active && vpnPresent) {
-            vpnPresent = false
-            AntiSpyVpnPromptManager.onVpnSessionEnded()
+            onVpnStateChanged(false)
         }
         handler.postDelayed(pollRunnable, VPN_POLL_MS)
     }
@@ -175,9 +175,24 @@ class AntiSpyVpnWatchService : Service() {
         handler.removeCallbacks(freezeRunnable)
         if (!vpnActive) {
             AntiSpyVpnPromptManager.onVpnSessionEnded()
+            if (isMainProfileWatcher()) {
+                postVpnStateAlert(R.string.anti_spy_vpn_alert_disconnected_text)
+            }
             return
         }
+        if (isMainProfileWatcher()) {
+            postVpnStateAlert(R.string.anti_spy_vpn_alert_connected_text)
+        }
         handler.postDelayed(freezeRunnable, FREEZE_DEBOUNCE_MS)
+    }
+
+    private fun isMainProfileWatcher(): Boolean = !AntiSpyManager.isWorkProfile(this)
+
+    private fun postVpnStateAlert(textResId: Int) {
+        val title = getString(R.string.anti_spy_monitor_notification_title)
+        val text = getString(textResId)
+        ZindanToast.show(this, text)
+        Utility.postUserAlert(this, VPN_STATE_NOTIFICATION_ID, title, text)
     }
 
     private fun maybeFreezeAllForVpn() {
@@ -296,6 +311,7 @@ class AntiSpyVpnWatchService : Service() {
     companion object {
         private const val TAG = "AntiSpyVpnWatch"
         private const val NOTIFICATION_ID = 0xe49d0
+        private const val VPN_STATE_NOTIFICATION_ID = 0xe49d1
         private const val FREEZE_DEBOUNCE_MS = 1500L
         private const val VPN_POLL_MS = 2000L
 

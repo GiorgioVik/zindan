@@ -20,7 +20,7 @@ import android.text.TextUtils
 import android.util.TypedValue
 import android.view.Menu
 import android.view.MenuItem
-import android.widget.Toast
+import net.typeblog.shelter.util.ZindanToast
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.ActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -173,7 +173,7 @@ class MainActivity : AppCompatActivity() {
             Utility.transferIntentToProfile(this, intent)
         } catch (_: IllegalStateException) {
             storage!!.setBoolean(LocalStorageManager.PREF_HAS_SETUP, false)
-            Toast.makeText(this, getString(R.string.work_profile_not_found), Toast.LENGTH_LONG).show()
+            ZindanToast.show(this, getString(R.string.work_profile_not_found), android.widget.Toast.LENGTH_LONG)
             finish()
             return
         }
@@ -184,7 +184,7 @@ class MainActivity : AppCompatActivity() {
         if (result.resultCode == RESULT_OK) {
             bindWorkService()
         } else {
-            Toast.makeText(this, getString(R.string.work_mode_disabled), Toast.LENGTH_LONG).show()
+            ZindanToast.show(this, getString(R.string.work_mode_disabled), android.widget.Toast.LENGTH_LONG)
             finish()
         }
     }
@@ -523,11 +523,11 @@ class MainActivity : AppCompatActivity() {
                 override fun callback(result: Int) {
                     runOnUiThread {
                         if (result == RESULT_OK) {
-                            Toast.makeText(
+                            ZindanToast.show(
                                 this@MainActivity,
                                 R.string.install_app_to_profile_success,
-                                Toast.LENGTH_LONG
-                            ).show()
+                                android.widget.Toast.LENGTH_LONG,
+                            )
                         }
                     }
                 }

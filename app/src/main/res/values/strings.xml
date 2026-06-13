@@ -55,6 +55,9 @@
     <string name="anti_spy_vpn_permission_grant">Allow VPN access</string>
     <string name="anti_spy_monitor_notification_title">Anti Spy</string>
     <string name="anti_spy_monitor_notification_text">Watching for VPN connections</string>
+    <string name="anti_spy_vpn_alert_connected_text">VPN connected</string>
+    <string name="anti_spy_vpn_alert_disconnected_text">VPN disconnected</string>
+    <string name="anti_spy_service_started_text">Anti Spy monitoring started</string>
     <string name="anti_spy_dummy_vpn_session">Zindan Anti Spy</string>
     <string name="anti_spy_vpn_prompt_title">VPN connection detected</string>
     <string name="anti_spy_vpn_prompt_text">A VPN was turned on. Close the running app in the work profile, then tap Yes to batch-freeze auto-freeze apps. Tap No to leave apps running (Zindan will not turn VPN back on).</string>
@@ -102,7 +105,7 @@
     <string name="settings_about">About</string>
     <string name="settings_version">Version</string>
     <string name="settings_source_code">Source Code</string>
-    <string name="settings_source_code_url" translatable="false">D:\Zindan3</string>
+    <string name="settings_source_code_url" translatable="false">D:\Zindan5</string>
 
     <!-- Toast Long Texts -->
     <string name="provision_finished">Zindan setup complete. Now restarting Zindan. If Zindan didn\'t start automatically, you may launch it again from your launcher.</string>

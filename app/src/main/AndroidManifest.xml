@@ -36,9 +36,9 @@
     <application
         android:name=".ShelterApplication"
         android:allowBackup="false"
-        android:icon="@mipmap/ic_launcher_egg"
+        android:icon="@mipmap/ic_launcher_zindan"
         android:label="@string/app_name"
-        android:roundIcon="@mipmap/ic_launcher_egg_round"
+        android:roundIcon="@mipmap/ic_launcher_zindan_round"
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
 

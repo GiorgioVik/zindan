@@ -3,7 +3,7 @@ package net.typeblog.shelter.util
 import android.content.Context
 import android.content.Intent
 import android.text.TextUtils
-import android.widget.Toast
+import net.typeblog.shelter.util.ZindanToast
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import net.typeblog.shelter.R
 
@@ -62,7 +62,7 @@ object AntiSpyLaunchGate {
 
     fun notifyLaunchBlocked(context: Context, reason: Int, packageName: String) {
         val app = context.applicationContext
-        Toast.makeText(app, messageForReason(app, reason), Toast.LENGTH_LONG).show()
+        ZindanToast.show(app, messageForReason(app, reason), android.widget.Toast.LENGTH_LONG)
         val broadcast = Intent(BROADCAST_LAUNCH_BLOCKED_VPN)
         broadcast.putExtra(EXTRA_BLOCK_REASON, reason)
         if (!TextUtils.isEmpty(packageName)) {

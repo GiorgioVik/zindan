@@ -26,7 +26,10 @@
     <string name="anti_spy_vpn_permission_required">Разрешите Zindan доступ к VPN один раз — Anti Spy сможет снимать сторонний VPN перед запуском.</string>
     <string name="anti_spy_vpn_permission_grant">Разрешить VPN</string>
     <string name="anti_spy_monitor_notification_title">Anti Spy</string>
-    <string name="anti_spy_monitor_notification_text">Контроль VPN при включённом Anti Spy</string><string name="anti_spy_dummy_vpn_session">Zindan Anti Spy</string><string name="anti_spy_vpn_prompt_title">Обнаружено подключение VPN</string>
+    <string name="anti_spy_monitor_notification_text">Контроль VPN</string>
+    <string name="anti_spy_vpn_alert_connected_text">VPN включен</string>
+    <string name="anti_spy_vpn_alert_disconnected_text">VPN выключен</string>
+    <string name="anti_spy_service_started_text">Мониторинг Anti Spy запущен</string><string name="anti_spy_dummy_vpn_session">Zindan Anti Spy</string><string name="anti_spy_vpn_prompt_title">Обнаружено подключение VPN</string>
     <string name="anti_spy_vpn_prompt_text">Включён VPN. Закройте работающее приложение из рабочего профиля, затем нажмите «Да» для групповой заморозки. «Нет» — приложения продолжат работу (Zindan VPN не включает).</string>
     <string name="anti_spy_vpn_prompt_yes">Да, заморозить всё</string>
     <string name="anti_spy_vpn_prompt_no">Нет</string>

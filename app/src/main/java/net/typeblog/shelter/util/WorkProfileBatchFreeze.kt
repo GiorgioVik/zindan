@@ -33,7 +33,8 @@ object WorkProfileBatchFreeze {
                 continue
             }
             try {
-                if (dpm.setApplicationHidden(admin, pkg, true)) {
+                val alreadyHidden = dpm.isApplicationHidden(admin, pkg)
+                if (alreadyHidden || dpm.setApplicationHidden(admin, pkg, true)) {
                     frozen++
                 }
             } catch (e: Exception) {

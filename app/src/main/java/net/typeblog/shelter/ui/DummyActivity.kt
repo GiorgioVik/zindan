@@ -16,7 +16,7 @@ import android.os.Bundle
 import android.os.IBinder
 import android.os.RemoteException
 import android.os.StrictMode
-import android.widget.Toast
+import net.typeblog.shelter.util.ZindanToast
 import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
 import net.typeblog.shelter.R
@@ -187,7 +187,7 @@ class DummyActivity : Activity() {
                 component = ComponentName(this@DummyActivity, SetupWizardActivity::class.java)
             }
             startActivity(intent)
-            Toast.makeText(this, getString(R.string.provision_finished), Toast.LENGTH_LONG).show()
+            ZindanToast.show(this, getString(R.string.provision_finished), android.widget.Toast.LENGTH_LONG)
             finish()
         }
     }
@@ -441,7 +441,7 @@ class DummyActivity : Activity() {
             }
             startActivity(launchIntent)
         } else {
-            Toast.makeText(this, getString(R.string.launch_app_fail, packageName), Toast.LENGTH_SHORT).show()
+            ZindanToast.show(this, getString(R.string.launch_app_fail, packageName))
         }
 
         finish()
@@ -543,7 +543,8 @@ class DummyActivity : Activity() {
 
     private fun actionPublicFreezeAll() {
         if (!isProfileOwner) {
-            Utility.launchFreezeInWorkProfile(this, AntiSpyManager.getAutoFreezeList())
+            AntiSpyManager.syncAutoFreezeListToWorkProfile(this)
+            Utility.launchFreezeInWorkProfile(this, AntiSpyManager.getAutoFreezeList(this))
             finish()
         } else {
             throw RuntimeException("unimplemented")
@@ -572,9 +573,10 @@ class DummyActivity : Activity() {
             }
             val frozen = WorkProfileBatchFreeze.freezeList(this, list)
             if (frozen > 0) {
-                Toast.makeText(this, R.string.freeze_all_success, Toast.LENGTH_SHORT).show()
-                Utility.scheduleAppListRefresh(this)
+                Utility.postVpnAutoFreezeSuccessAlert(this)
+                ZindanToast.show(this, R.string.freeze_all_success)
             }
+            Utility.scheduleAppListRefresh(this)
             finish()
         } else {
             finish()
@@ -592,7 +594,7 @@ class DummyActivity : Activity() {
                 }
             }
             stopService(Intent(this, FreezeService::class.java))
-            Toast.makeText(this, R.string.unfreeze_all_success, Toast.LENGTH_SHORT).show()
+            ZindanToast.show(this, R.string.unfreeze_all_success)
             finish()
         } else {
             finish()
