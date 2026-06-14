@@ -49,6 +49,8 @@
     <string name="create_unfreeze_shortcut">Create Launch Shortcut</string>
     <string name="unfreeze_and_launch">Launch</string>
     <string name="auto_freeze">Auto Freeze</string>
+    <string name="app_menu_check_off" translatable="false">\u2610\u0020</string>
+    <string name="app_menu_check_on" translatable="false">\u2612\u0020</string>
     <string name="anti_spy_vpn_block_title">VPN is active</string>
     <string name="anti_spy_vpn_block_launch_manual">Cannot launch the app. Turn off VPN manually and try again.</string>
     <string name="anti_spy_vpn_permission_required">Allow Zindan VPN access once so Anti Spy can clear third-party VPN before launch.</string>

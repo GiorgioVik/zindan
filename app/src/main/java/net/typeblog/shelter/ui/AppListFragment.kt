@@ -184,7 +184,10 @@ class AppListFragment : BaseFragment() {
         for (entry in entries) {
             val row = TextView(context).apply {
                 text = if (entry.checkable) {
-                    (if (entry.checked) "тЬУ " else "   ") + entry.label
+                    getString(
+                        if (entry.checked) R.string.app_menu_check_on
+                        else R.string.app_menu_check_off
+                    ) + entry.label
                 } else {
                     entry.label
                 }
