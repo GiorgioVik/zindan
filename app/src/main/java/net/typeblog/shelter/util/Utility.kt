@@ -212,10 +212,19 @@ object Utility {
             return
         }
         try {
-            val intent = Intent(context, MainActivity::class.java).apply {
-                action = MainActivity.ACTION_SHOW_BATCH_TOAST
-                putExtra(MainActivity.EXTRA_TOAST_RES_ID, resId)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            val useMainActivity = MainActivity.isResumed
+            val intent = if (useMainActivity) {
+                Intent(context, MainActivity::class.java).apply {
+                    action = MainActivity.ACTION_SHOW_BATCH_TOAST
+                    putExtra(MainActivity.EXTRA_TOAST_RES_ID, resId)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                }
+            } else {
+                Intent(context, DummyActivity::class.java).apply {
+                    action = DummyActivity.SHOW_TOAST
+                    putExtra(MainActivity.EXTRA_TOAST_RES_ID, resId)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                }
             }
             transferIntentToProfile(context, intent)
             AuthenticationUtility.signIntent(intent)

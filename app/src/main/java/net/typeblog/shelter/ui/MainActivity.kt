@@ -107,6 +107,18 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        storage = LocalStorageManager.getInstance()
+
+        if (getSystemService(DevicePolicyManager::class.java).isProfileOwnerApp(packageName)) {
+            android.util.Log.d("MainActivity", "started in user profile. stopping.")
+            finish()
+            return
+        }
+
+        if (finishIfBackgroundShortcutLaunch(intent)) {
+            return
+        }
+
         setContentView(R.layout.activity_main)
         val toolbar = findViewById<androidx.appcompat.widget.Toolbar>(R.id.main_toolbar)
         setSupportActionBar(toolbar)
@@ -119,7 +131,6 @@ class MainActivity : AppCompatActivity() {
             TypedValue.COMPLEX_UNIT_DIP, 20f, resources.displayMetrics
         ).toInt()
         toolbar.setContentInsetsRelative(logoInset, 4)
-        storage = LocalStorageManager.getInstance()
 
         LocalBroadcastManager.getInstance(this)
             .registerReceiver(
@@ -127,12 +138,46 @@ class MainActivity : AppCompatActivity() {
                 IntentFilter(AntiSpyLaunchGate.BROADCAST_LAUNCH_BLOCKED_VPN)
             )
 
-        if (getSystemService(DevicePolicyManager::class.java).isProfileOwnerApp(packageName)) {
-            android.util.Log.d("MainActivity", "started in user profile. stopping.")
-            finish()
-        } else {
-            init()
+        init()
+    }
+
+    private fun finishIfBackgroundShortcutLaunch(intent: Intent?): Boolean {
+        if (!isBackgroundShortcutAction(intent)) return false
+        val s = storage!!
+        if (!s.getBoolean(LocalStorageManager.PREF_HAS_SETUP)
+            || s.getBoolean(LocalStorageManager.PREF_IS_SETTING_UP)
+        ) {
+            return false
         }
+        dispatchBackgroundShortcutAction(intent!!)
+        finish()
+        return true
+    }
+
+    private fun isBackgroundShortcutAction(intent: Intent?): Boolean =
+        intent?.action in listOf(
+            ACTION_BATCH_FREEZE_ALL,
+            ACTION_BATCH_UNFREEZE_ALL,
+            ACTION_SHOW_BATCH_TOAST,
+        )
+
+    private fun dispatchBackgroundShortcutAction(intent: Intent) {
+        when (intent.action) {
+            ACTION_BATCH_FREEZE_ALL -> launchDummyBatch(DummyActivity.PUBLIC_FREEZE_ALL)
+            ACTION_BATCH_UNFREEZE_ALL -> launchDummyBatch(DummyActivity.PUBLIC_UNFREEZE_ALL)
+            ACTION_SHOW_BATCH_TOAST -> {
+                val resId = intent.getIntExtra(EXTRA_TOAST_RES_ID, 0)
+                if (resId != 0) {
+                    ZindanToast.show(this, resId)
+                }
+            }
+        }
+    }
+
+    private fun launchDummyBatch(action: String) {
+        startActivity(Intent(action).apply {
+            component = ComponentName(this@MainActivity, DummyActivity::class.java)
+        })
     }
 
     private fun init() {
@@ -371,6 +416,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        isResumed = true
         AntiSpyManager.syncVpnWatchEverywhere(this)
         if (pendingVpnBlockReason != 0) {
             val reason = pendingVpnBlockReason
@@ -384,6 +430,11 @@ class MainActivity : AppCompatActivity() {
             finish()
             startActivity(intent)
         }
+    }
+
+    override fun onPause() {
+        isResumed = false
+        super.onPause()
     }
 
     override fun onDestroy() {
@@ -530,7 +581,7 @@ class MainActivity : AppCompatActivity() {
                 true
             }
             R.id.main_menu_create_freeze_all_shortcut -> {
-                val launchIntent = batchShortcutIntent(ACTION_BATCH_FREEZE_ALL)
+                val launchIntent = batchShortcutIntent(DummyActivity.PUBLIC_FREEZE_ALL)
                 Utility.createLauncherShortcut(
                     this, launchIntent,
                     Icon.createWithResource(this, R.drawable.ic_shortcut_freeze),
@@ -539,7 +590,7 @@ class MainActivity : AppCompatActivity() {
                 true
             }
             R.id.main_menu_create_unfreeze_all_shortcut -> {
-                val launchIntent = batchShortcutIntent(ACTION_BATCH_UNFREEZE_ALL)
+                val launchIntent = batchShortcutIntent(DummyActivity.PUBLIC_UNFREEZE_ALL)
                 Utility.createLauncherShortcut(
                     this, launchIntent,
                     Icon.createWithResource(this, R.drawable.ic_shortcut_unfreeze),
@@ -607,12 +658,16 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun batchShortcutIntent(action: String): Intent =
-        Intent(this, MainActivity::class.java).apply {
+        Intent(this, DummyActivity::class.java).apply {
             this.action = action
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         }
 
     companion object {
+        @JvmField
+        @Volatile
+        var isResumed = false
+
         const val ACTION_BATCH_FREEZE_ALL = "net.typeblog.shelter.action.BATCH_FREEZE_ALL"
         const val ACTION_BATCH_UNFREEZE_ALL = "net.typeblog.shelter.action.BATCH_UNFREEZE_ALL"
         const val ACTION_SHOW_BATCH_TOAST = "net.typeblog.shelter.action.SHOW_BATCH_TOAST"

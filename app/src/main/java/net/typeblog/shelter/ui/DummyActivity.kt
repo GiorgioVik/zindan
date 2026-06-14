@@ -103,6 +103,7 @@ class DummyActivity : Activity() {
             UNFREEZE_APP -> actionUnfreezeApp()
             PUBLIC_FREEZE_ALL -> actionPublicFreezeAll()
             PUBLIC_UNFREEZE_ALL -> actionPublicUnfreezeAll()
+            SHOW_TOAST -> actionShowToast()
             FREEZE_ALL_IN_LIST -> actionFreezeAllInList()
             UNFREEZE_ALL_IN_LIST -> actionUnfreezeAllInList()
             ENABLE_AUTO_FREEZE_WORK_PROFILE -> actionEnableAutoFreezeWorkProfile()
@@ -557,8 +558,32 @@ class DummyActivity : Activity() {
         overridePendingTransition(0, 0)
     }
 
+    private fun forwardBatchToMainActivityIfVisible(batchAction: String): Boolean {
+        if (!MainActivity.isResumed) return false
+        val mainAction = when (batchAction) {
+            PUBLIC_FREEZE_ALL -> MainActivity.ACTION_BATCH_FREEZE_ALL
+            PUBLIC_UNFREEZE_ALL -> MainActivity.ACTION_BATCH_UNFREEZE_ALL
+            else -> return false
+        }
+        startActivity(Intent(this, MainActivity::class.java).apply {
+            action = mainAction
+            addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        })
+        finishBatchShortcutFlow()
+        return true
+    }
+
+    private fun actionShowToast() {
+        val resId = intent.getIntExtra(MainActivity.EXTRA_TOAST_RES_ID, 0)
+        if (resId != 0) {
+            ZindanToast.show(this, resId)
+        }
+        finishBatchShortcutFlow()
+    }
+
     private fun actionPublicFreezeAll() {
         if (!isProfileOwner) {
+            if (forwardBatchToMainActivityIfVisible(PUBLIC_FREEZE_ALL)) return
             AntiSpyManager.syncAutoFreezeListToWorkProfile(this)
             Utility.launchFreezeInWorkProfile(this, AntiSpyManager.getAutoFreezeList(this))
             finishBatchShortcutFlow()
@@ -621,6 +646,7 @@ class DummyActivity : Activity() {
 
     private fun actionPublicUnfreezeAll() {
         if (!isProfileOwner) {
+            if (forwardBatchToMainActivityIfVisible(PUBLIC_UNFREEZE_ALL)) return
             if (!ensureAntiSpyVpnPermissionThenLaunch()) {
                 return
             }
@@ -783,6 +809,7 @@ class DummyActivity : Activity() {
         const val UNFREEZE_APP = "net.typeblog.shelter.action.UNFREEZE_APP"
         const val PUBLIC_FREEZE_ALL = "net.typeblog.shelter.action.PUBLIC_FREEZE_ALL"
         const val PUBLIC_UNFREEZE_ALL = "net.typeblog.shelter.action.PUBLIC_UNFREEZE_ALL"
+        const val SHOW_TOAST = "net.typeblog.shelter.action.SHOW_TOAST"
         const val FREEZE_ALL_IN_LIST = "net.typeblog.shelter.action.FREEZE_ALL_IN_LIST"
         const val UNFREEZE_ALL_IN_LIST = "net.typeblog.shelter.action.UNFREEZE_ALL_IN_LIST"
         const val ENABLE_AUTO_FREEZE_WORK_PROFILE =

@@ -95,6 +95,7 @@
                 <action android:name="net.typeblog.shelter.action.UNFREEZE_APP" />
                 <action android:name="net.typeblog.shelter.action.PUBLIC_FREEZE_ALL" />
                 <action android:name="net.typeblog.shelter.action.PUBLIC_UNFREEZE_ALL" />
+                <action android:name="net.typeblog.shelter.action.SHOW_TOAST" />
                 <action android:name="net.typeblog.shelter.action.FREEZE_ALL_IN_LIST" />
                 <action android:name="net.typeblog.shelter.action.UNFREEZE_ALL_IN_LIST" />
                 <action android:name="net.typeblog.shelter.action.ENABLE_AUTO_FREEZE_WORK_PROFILE" />

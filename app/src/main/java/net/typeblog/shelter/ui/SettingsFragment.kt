@@ -133,8 +133,8 @@ class SettingsFragment : PreferenceFragmentCompat(), Preference.OnPreferenceChan
     }
 
     private fun createFreezeAllShortcut(pref: Preference): Boolean {
-        val launchIntent = Intent(requireContext(), MainActivity::class.java).apply {
-            action = MainActivity.ACTION_BATCH_FREEZE_ALL
+        val launchIntent = Intent(requireContext(), DummyActivity::class.java).apply {
+            action = DummyActivity.PUBLIC_FREEZE_ALL
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         }
         Utility.createLauncherShortcut(
@@ -146,8 +146,8 @@ class SettingsFragment : PreferenceFragmentCompat(), Preference.OnPreferenceChan
     }
 
     private fun createUnfreezeAllShortcut(pref: Preference): Boolean {
-        val launchIntent = Intent(requireContext(), MainActivity::class.java).apply {
-            action = MainActivity.ACTION_BATCH_UNFREEZE_ALL
+        val launchIntent = Intent(requireContext(), DummyActivity::class.java).apply {
+            action = DummyActivity.PUBLIC_UNFREEZE_ALL
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         }
         Utility.createLauncherShortcut(
