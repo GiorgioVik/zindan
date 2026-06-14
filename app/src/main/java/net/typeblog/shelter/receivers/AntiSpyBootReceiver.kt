@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import net.typeblog.shelter.util.AntiSpyManager
 import net.typeblog.shelter.util.LocalStorageManager
+import net.typeblog.shelter.util.Utility
 
 /**
  * After device reboot, schedule a one-time batch freeze when Zindan starts with Anti Spy on.
@@ -19,6 +20,7 @@ class AntiSpyBootReceiver : BroadcastReceiver() {
         LocalStorageManager.initialize(app)
         val storage = LocalStorageManager.getInstance()
         AntiSpyManager.onDeviceBoot(storage)
+        Utility.trimApplicationCache(app)
         AntiSpyManager.syncVpnWatchEverywhere(app)
     }
 }

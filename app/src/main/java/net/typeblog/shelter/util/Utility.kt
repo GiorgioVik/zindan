@@ -205,6 +205,26 @@ object Utility {
         }, APP_LIST_REFRESH_DELAY_MS)
     }
 
+    fun showToastOnMainProfile(context: Context, resId: Int) {
+        val dpm = context.getSystemService(android.app.admin.DevicePolicyManager::class.java)
+        if (dpm == null || !dpm.isProfileOwnerApp(context.packageName)) {
+            ZindanToast.show(context, resId)
+            return
+        }
+        try {
+            val intent = Intent(context, MainActivity::class.java).apply {
+                action = MainActivity.ACTION_SHOW_BATCH_TOAST
+                putExtra(MainActivity.EXTRA_TOAST_RES_ID, resId)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            }
+            transferIntentToProfile(context, intent)
+            AuthenticationUtility.signIntent(intent)
+            context.startActivity(intent)
+        } catch (_: Exception) {
+            ZindanToast.show(context, resId)
+        }
+    }
+
     fun resolveApplicationLabel(context: Context, packageName: String): CharSequence {
         return try {
             val pm = context.packageManager
@@ -460,9 +480,10 @@ object Utility {
         }
     }
 
-    fun drawableToBitmap(drawable: Drawable): Bitmap {
+    fun drawableToBitmap(drawable: Drawable, maxSizePx: Int = 0): Bitmap {
         if (drawable is BitmapDrawable) {
-            return drawable.bitmap
+            val bitmap = drawable.bitmap
+            return if (maxSizePx > 0) scaleBitmapToMax(bitmap, maxSizePx) else bitmap
         }
 
         var width = drawable.intrinsicWidth
@@ -475,7 +496,30 @@ object Utility {
         drawable.setBounds(0, 0, canvas.width, canvas.height)
         drawable.draw(canvas)
 
-        return bitmap
+        return if (maxSizePx > 0) scaleBitmapToMax(bitmap, maxSizePx) else bitmap
+    }
+
+    private fun scaleBitmapToMax(source: Bitmap, maxSizePx: Int): Bitmap {
+        val largest = maxOf(source.width, source.height)
+        if (largest <= maxSizePx) {
+            return source
+        }
+        val scale = maxSizePx.toFloat() / largest
+        val targetW = (source.width * scale).toInt().coerceAtLeast(1)
+        val targetH = (source.height * scale).toInt().coerceAtLeast(1)
+        return Bitmap.createScaledBitmap(source, targetW, targetH, true)
+    }
+
+    /** Delete generated files under the app cache directory (safe on cold start after reboot). */
+    fun trimApplicationCache(context: Context) {
+        val cacheRoot = context.cacheDir ?: return
+        try {
+            cacheRoot.listFiles()?.forEach { child ->
+                child.deleteRecursively()
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "trimApplicationCache failed", e)
+        }
     }
 
     fun killShelterServices(serviceMain: IShelterService, serviceWork: IShelterService) {

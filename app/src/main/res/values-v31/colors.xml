@@ -11,7 +11,7 @@
     <color name="colorNavigationIconTint">@color/zindanLightYellow</color>
     <color name="colorNavigationIconTintSelected">@color/zindanDarkYellow</color>
     <color name="colorTextPrimary">#FFFFFF</color>
-    <color name="colorTextOnLight">@color/zindanGreenDark</color>
+    <color name="colorTextOnLight">@color/zindanLightYellow</color>
     <color name="colorTextSecondary">#9E9E9E</color>
     <color name="disabledAppBackground">@color/zindanGreenDark</color>
     <color name="selectedAppBackground">#152820</color>

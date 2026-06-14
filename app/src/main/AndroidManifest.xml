@@ -50,6 +50,12 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <intent-filter>
+                <action android:name="net.typeblog.shelter.action.BATCH_FREEZE_ALL" />
+                <action android:name="net.typeblog.shelter.action.BATCH_UNFREEZE_ALL" />
+                <action android:name="net.typeblog.shelter.action.SHOW_BATCH_TOAST" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
         </activity>
 
         <!-- Setup Wizard -->
@@ -86,6 +92,7 @@
                 <action android:name="net.typeblog.shelter.action.UNINSTALL_PACKAGE" />
                 <action android:name="net.typeblog.shelter.action.UNFREEZE_AND_LAUNCH" />
                 <action android:name="net.typeblog.shelter.action.PUBLIC_UNFREEZE_AND_LAUNCH" />
+                <action android:name="net.typeblog.shelter.action.UNFREEZE_APP" />
                 <action android:name="net.typeblog.shelter.action.PUBLIC_FREEZE_ALL" />
                 <action android:name="net.typeblog.shelter.action.PUBLIC_UNFREEZE_ALL" />
                 <action android:name="net.typeblog.shelter.action.FREEZE_ALL_IN_LIST" />

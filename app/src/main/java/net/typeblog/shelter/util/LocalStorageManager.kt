@@ -84,6 +84,7 @@ class LocalStorageManager private constructor(context: Context) {
         const val PREF_ANTI_SPY_BOOT_FREEZE_PENDING = "anti_spy_boot_freeze_pending"
         const val PREF_ANTI_SPY_LAUNCH_VERSION_CODE = "anti_spy_launch_version_code"
         const val PREF_UNFREEZE_SHORTCUT_REGISTRY = "unfreeze_shortcut_registry"
+        const val PREF_LEGACY_FROZEN_MIGRATION_DONE = "legacy_frozen_migration_done"
 
         private const val LIST_DIVIDER = ","
         private const val PREFS_NAME = "prefs"

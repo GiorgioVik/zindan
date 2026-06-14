@@ -87,6 +87,7 @@ class MainActivity : AppCompatActivity() {
     var showAll = false
     private var pendingVpnBlockReason = 0
     private var pendingLaunchPackageName: String? = null
+    private var pendingBatchAction: String? = null
 
     private val antiSpyVpnBlockReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -141,11 +142,21 @@ class MainActivity : AppCompatActivity() {
         } else if (!s.getBoolean(LocalStorageManager.PREF_HAS_SETUP)) {
             startSetup.launch(null)
         } else {
+            if (AntiSpyManager.shouldRunStartupFreeze(s)) {
+                Utility.trimApplicationCache(this)
+            }
+            handleBatchShortcutIntent(intent)
             AntiSpyManager.onApplicationLaunch(s, BuildConfig.VERSION_CODE)
             requestAntiSpyNotificationPermissionIfNeeded()
             SettingsManager.getInstance().applyAll()
             bindServices()
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleBatchShortcutIntent(intent)
     }
 
     private fun setupWizardCb(result: Boolean) {
@@ -207,9 +218,67 @@ class MainActivity : AppCompatActivity() {
             window.decorView.post {
                 runAntiSpyStartupFreezeIfNeeded()
                 AntiSpyManager.syncVpnWatchEverywhere(this@MainActivity)
+                runPendingBatchShortcutAction()
             }
             buildView()
         }
+    }
+
+    private fun runPendingBatchShortcutAction() {
+        when (pendingBatchAction) {
+            ACTION_BATCH_FREEZE_ALL -> runBatchFreezeAll()
+            ACTION_BATCH_UNFREEZE_ALL -> runBatchUnfreezeAll()
+        }
+        pendingBatchAction = null
+    }
+
+    private fun handleBatchShortcutIntent(intent: Intent?): Boolean {
+        when (intent?.action) {
+            ACTION_BATCH_FREEZE_ALL -> {
+                intent.action = Intent.ACTION_MAIN
+                if (servicesAlive()) {
+                    runBatchFreezeAll()
+                } else {
+                    pendingBatchAction = ACTION_BATCH_FREEZE_ALL
+                }
+                return true
+            }
+            ACTION_BATCH_UNFREEZE_ALL -> {
+                intent.action = Intent.ACTION_MAIN
+                if (servicesAlive()) {
+                    runBatchUnfreezeAll()
+                } else {
+                    pendingBatchAction = ACTION_BATCH_UNFREEZE_ALL
+                }
+                return true
+            }
+            ACTION_SHOW_BATCH_TOAST -> {
+                val resId = intent.getIntExtra(EXTRA_TOAST_RES_ID, 0)
+                if (resId != 0) {
+                    ZindanToast.show(this, resId)
+                }
+                return true
+            }
+        }
+        return false
+    }
+
+    private fun runBatchFreezeAll() {
+        val batchIntent = Intent(DummyActivity.PUBLIC_FREEZE_ALL).apply {
+            component = ComponentName(this@MainActivity, DummyActivity::class.java)
+        }
+        DummyActivity.registerSameProcessRequest(batchIntent)
+        startActivity(batchIntent)
+        refreshAppLists()
+    }
+
+    private fun runBatchUnfreezeAll() {
+        val batchIntent = Intent(DummyActivity.PUBLIC_UNFREEZE_ALL).apply {
+            component = ComponentName(this@MainActivity, DummyActivity::class.java)
+        }
+        DummyActivity.registerSameProcessRequest(batchIntent)
+        startActivity(batchIntent)
+        refreshAppLists()
     }
 
     private fun runAntiSpyStartupFreezeIfNeeded() {
@@ -361,6 +430,23 @@ class MainActivity : AppCompatActivity() {
         return true
     }
 
+    fun runAfterVpnGateCleared(packageName: String, forceGate: Boolean, action: Runnable) {
+        AntiSpyLaunchGate.runBeforeAutoFreezeAccess(
+            this,
+            LocalStorageManager.getInstance(),
+            packageName,
+            forceGate,
+            action,
+            AntiSpyLaunchGate.BlockedCallback { reason ->
+                pendingVpnBlockReason = reason
+                showAntiSpyVpnLaunchBlockedDialog(reason)
+                if (reason == AntiSpyLaunchGate.REASON_VPN_PERMISSION_REQUIRED) {
+                    requestAntiSpyVpnPermission()
+                }
+            }
+        )
+    }
+
     private fun requestAntiSpyNotificationPermissionIfNeeded() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
@@ -427,21 +513,11 @@ class MainActivity : AppCompatActivity() {
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         return when (item.itemId) {
             R.id.main_menu_unfreeze_all -> {
-                val unfreezeIntent = Intent(DummyActivity.PUBLIC_UNFREEZE_ALL).apply {
-                    component = ComponentName(this@MainActivity, DummyActivity::class.java)
-                }
-                DummyActivity.registerSameProcessRequest(unfreezeIntent)
-                startActivity(unfreezeIntent)
-                refreshAppLists()
+                runBatchUnfreezeAll()
                 true
             }
             R.id.main_menu_freeze_all -> {
-                val intent = Intent(DummyActivity.PUBLIC_FREEZE_ALL).apply {
-                    component = ComponentName(this@MainActivity, DummyActivity::class.java)
-                }
-                DummyActivity.registerSameProcessRequest(intent)
-                startActivity(intent)
-                refreshAppLists()
+                runBatchFreezeAll()
                 true
             }
             R.id.main_menu_settings -> {
@@ -454,10 +530,7 @@ class MainActivity : AppCompatActivity() {
                 true
             }
             R.id.main_menu_create_freeze_all_shortcut -> {
-                val launchIntent = Intent(DummyActivity.PUBLIC_FREEZE_ALL).apply {
-                    component = ComponentName(this@MainActivity, DummyActivity::class.java)
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-                }
+                val launchIntent = batchShortcutIntent(ACTION_BATCH_FREEZE_ALL)
                 Utility.createLauncherShortcut(
                     this, launchIntent,
                     Icon.createWithResource(this, R.drawable.ic_shortcut_freeze),
@@ -466,10 +539,7 @@ class MainActivity : AppCompatActivity() {
                 true
             }
             R.id.main_menu_create_unfreeze_all_shortcut -> {
-                val launchIntent = Intent(DummyActivity.PUBLIC_UNFREEZE_ALL).apply {
-                    component = ComponentName(this@MainActivity, DummyActivity::class.java)
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-                }
+                val launchIntent = batchShortcutIntent(ACTION_BATCH_UNFREEZE_ALL)
                 Utility.createLauncherShortcut(
                     this, launchIntent,
                     Icon.createWithResource(this, R.drawable.ic_shortcut_unfreeze),
@@ -536,7 +606,17 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun batchShortcutIntent(action: String): Intent =
+        Intent(this, MainActivity::class.java).apply {
+            this.action = action
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        }
+
     companion object {
+        const val ACTION_BATCH_FREEZE_ALL = "net.typeblog.shelter.action.BATCH_FREEZE_ALL"
+        const val ACTION_BATCH_UNFREEZE_ALL = "net.typeblog.shelter.action.BATCH_UNFREEZE_ALL"
+        const val ACTION_SHOW_BATCH_TOAST = "net.typeblog.shelter.action.SHOW_BATCH_TOAST"
+        const val EXTRA_TOAST_RES_ID = "toast_res_id"
         const val BROADCAST_CONTEXT_MENU_CLOSED =
             "net.typeblog.shelter.broadcast.CONTEXT_MENU_CLOSED"
         const val BROADCAST_SEARCH_FILTER_CHANGED =

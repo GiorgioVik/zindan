@@ -100,6 +100,7 @@ class DummyActivity : Activity() {
             UNINSTALL_PACKAGE -> actionUninstallPackage()
             FINALIZE_PROVISION -> actionFinalizeProvision()
             UNFREEZE_AND_LAUNCH, PUBLIC_UNFREEZE_AND_LAUNCH -> actionUnfreezeAndLaunch()
+            UNFREEZE_APP -> actionUnfreezeApp()
             PUBLIC_FREEZE_ALL -> actionPublicFreezeAll()
             PUBLIC_UNFREEZE_ALL -> actionPublicUnfreezeAll()
             FREEZE_ALL_IN_LIST -> actionFreezeAllInList()
@@ -407,7 +408,16 @@ class DummyActivity : Activity() {
             if (!ensureAntiSpyVpnPermissionThenLaunch()) {
                 return
             }
-            runAntiSpyLaunchGate()
+            val packageName = requireNotNull(intent.getStringExtra("packageName"))
+            val proceed = Runnable {
+                forwardUnfreezeAndLaunchToWorkProfile()
+                finish()
+            }
+            if (AntiSpyLaunchGate.shouldApplyVpnGate(packageName)) {
+                runAntiSpyLaunchGate()
+            } else {
+                proceed.run()
+            }
             return
         }
 
@@ -541,25 +551,100 @@ class DummyActivity : Activity() {
         startService(Intent(this, FreezeService::class.java))
     }
 
+    private fun finishBatchShortcutFlow() {
+        finish()
+        @Suppress("DEPRECATION")
+        overridePendingTransition(0, 0)
+    }
+
     private fun actionPublicFreezeAll() {
         if (!isProfileOwner) {
             AntiSpyManager.syncAutoFreezeListToWorkProfile(this)
             Utility.launchFreezeInWorkProfile(this, AntiSpyManager.getAutoFreezeList(this))
-            finish()
+            finishBatchShortcutFlow()
         } else {
             throw RuntimeException("unimplemented")
         }
     }
 
+    private fun actionUnfreezeApp() {
+        if (!isProfileOwner) {
+            val packageName = intent.getStringExtra("packageName") ?: run {
+                finish()
+                return
+            }
+            if (!ensureAntiSpyVpnPermissionThenLaunch()) {
+                return
+            }
+            val proceed = Runnable {
+                forwardUnfreezeAppToWorkProfile(packageName)
+                finish()
+            }
+            if (AntiSpyLaunchGate.shouldApplyVpnGate(packageName)) {
+                AntiSpyLaunchGate.runBeforeLaunch(
+                    this, LocalStorageManager.getInstance(), packageName,
+                    proceed,
+                    { reason ->
+                        if (reason == AntiSpyLaunchGate.REASON_VPN_PERMISSION_REQUIRED) {
+                            if (ensureAntiSpyVpnPermissionThenLaunch()) {
+                                actionUnfreezeApp()
+                            }
+                            return@runBeforeLaunch
+                        }
+                        finish()
+                    }
+                )
+            } else {
+                proceed.run()
+            }
+            return
+        }
+
+        val packageName = intent.getStringExtra("packageName") ?: run {
+            finish()
+            return
+        }
+        policyManager!!.setApplicationHidden(
+            ComponentName(this, ShelterDeviceAdminReceiver::class.java),
+            packageName, false
+        )
+        Utility.scheduleAppListRefresh(this)
+        finish()
+    }
+
+    private fun forwardUnfreezeAppToWorkProfile(packageName: String) {
+        val forwardIntent = Intent(UNFREEZE_APP)
+        Utility.transferIntentToProfile(this, forwardIntent)
+        forwardIntent.putExtra("packageName", packageName)
+        startActivity(forwardIntent)
+    }
+
     private fun actionPublicUnfreezeAll() {
         if (!isProfileOwner) {
-            val forwardIntent = Intent(UNFREEZE_ALL_IN_LIST)
-            Utility.transferIntentToProfile(this, forwardIntent)
-            val list = LocalStorageManager.getInstance()
-                .getStringList(LocalStorageManager.PREF_AUTO_FREEZE_LIST_WORK_PROFILE)
-            forwardIntent.putExtra("list", list)
-            startActivity(forwardIntent)
-            finish()
+            if (!ensureAntiSpyVpnPermissionThenLaunch()) {
+                return
+            }
+            AntiSpyLaunchGate.runBeforeLaunch(
+                this, LocalStorageManager.getInstance(), "",
+                {
+                    val forwardIntent = Intent(UNFREEZE_ALL_IN_LIST)
+                    Utility.transferIntentToProfile(this, forwardIntent)
+                    val list = LocalStorageManager.getInstance()
+                        .getStringList(LocalStorageManager.PREF_AUTO_FREEZE_LIST_WORK_PROFILE)
+                    forwardIntent.putExtra("list", list)
+                    startActivity(forwardIntent)
+                    finishBatchShortcutFlow()
+                },
+                { reason ->
+                    if (reason == AntiSpyLaunchGate.REASON_VPN_PERMISSION_REQUIRED) {
+                        if (ensureAntiSpyVpnPermissionThenLaunch()) {
+                            actionPublicUnfreezeAll()
+                        }
+                        return@runBeforeLaunch
+                    }
+                    finish()
+                }
+            )
         } else {
             throw RuntimeException("unimplemented")
         }
@@ -574,7 +659,7 @@ class DummyActivity : Activity() {
             val frozen = WorkProfileBatchFreeze.freezeList(this, list)
             if (frozen > 0) {
                 Utility.postVpnAutoFreezeSuccessAlert(this)
-                ZindanToast.show(this, R.string.freeze_all_success)
+                Utility.showToastOnMainProfile(this, R.string.freeze_all_success)
             }
             Utility.scheduleAppListRefresh(this)
             finish()
@@ -594,7 +679,7 @@ class DummyActivity : Activity() {
                 }
             }
             stopService(Intent(this, FreezeService::class.java))
-            ZindanToast.show(this, R.string.unfreeze_all_success)
+            Utility.showToastOnMainProfile(this, R.string.unfreeze_all_success)
             finish()
         } else {
             finish()
@@ -695,6 +780,7 @@ class DummyActivity : Activity() {
         const val UNINSTALL_PACKAGE = "net.typeblog.shelter.action.UNINSTALL_PACKAGE"
         const val UNFREEZE_AND_LAUNCH = "net.typeblog.shelter.action.UNFREEZE_AND_LAUNCH"
         const val PUBLIC_UNFREEZE_AND_LAUNCH = "net.typeblog.shelter.action.PUBLIC_UNFREEZE_AND_LAUNCH"
+        const val UNFREEZE_APP = "net.typeblog.shelter.action.UNFREEZE_APP"
         const val PUBLIC_FREEZE_ALL = "net.typeblog.shelter.action.PUBLIC_FREEZE_ALL"
         const val PUBLIC_UNFREEZE_ALL = "net.typeblog.shelter.action.PUBLIC_UNFREEZE_ALL"
         const val FREEZE_ALL_IN_LIST = "net.typeblog.shelter.action.FREEZE_ALL_IN_LIST"
@@ -720,7 +806,8 @@ class DummyActivity : Activity() {
         private val ACTIONS_ALLOWED_WITHOUT_SIGNATURE_SAME_PROCESS = listOf(
             INSTALL_PACKAGE,
             UNINSTALL_PACKAGE,
-            UNFREEZE_AND_LAUNCH
+            UNFREEZE_AND_LAUNCH,
+            UNFREEZE_APP
         )
 
         private const val REQUEST_INSTALL_PACKAGE = 1

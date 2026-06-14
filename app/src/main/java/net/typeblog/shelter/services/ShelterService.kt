@@ -18,6 +18,7 @@ import net.typeblog.shelter.ShelterApplication
 import net.typeblog.shelter.receivers.ShelterDeviceAdminReceiver
 import net.typeblog.shelter.ui.DummyActivity
 import net.typeblog.shelter.util.ApplicationInfoWrapper
+import net.typeblog.shelter.util.AutoFreezePolicy
 import net.typeblog.shelter.util.FileProviderProxy
 import net.typeblog.shelter.util.UriForwardProxy
 import net.typeblog.shelter.util.Utility
@@ -88,6 +89,7 @@ class ShelterService : Service() {
             Thread {
                 val icon = Utility.drawableToBitmap(
                     info.getInfo()!!.loadUnbadgedIcon(packageManager!!),
+                    LIST_ICON_MAX_PX,
                 )
                 try {
                     callback.callback(icon)
@@ -162,6 +164,9 @@ class ShelterService : Service() {
 
         override fun freezeApp(app: ApplicationInfoWrapper) {
             check(isProfileOwner) { "Cannot freeze app without being profile owner" }
+            if (!AutoFreezePolicy.isInAutoFreezeList(app.getPackageName())) {
+                return
+            }
             policyManager!!.setApplicationHidden(adminComponent!!, app.getPackageName(), true)
         }
 
@@ -265,5 +270,6 @@ class ShelterService : Service() {
     companion object {
         const val RESULT_CANNOT_INSTALL_SYSTEM_APP = 100001
         private const val NOTIFICATION_ID = 0x49a11
+        private const val LIST_ICON_MAX_PX = 128
     }
 }

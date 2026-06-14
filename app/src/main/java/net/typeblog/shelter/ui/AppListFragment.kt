@@ -27,6 +27,7 @@ import net.typeblog.shelter.util.ZindanToast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.view.ActionMode
+import androidx.core.content.ContextCompat
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -37,9 +38,11 @@ import net.typeblog.shelter.services.IGetAppsCallback
 import net.typeblog.shelter.services.ILoadIconCallback
 import net.typeblog.shelter.services.IShelterService
 import net.typeblog.shelter.services.ShelterService
+import net.typeblog.shelter.util.AntiSpyLaunchGate
 import net.typeblog.shelter.util.AntiSpyManager
 import net.typeblog.shelter.util.ApplicationInfoWrapper
 import net.typeblog.shelter.util.AutoFreezeDefaults
+import net.typeblog.shelter.util.AutoFreezePolicy
 import net.typeblog.shelter.util.LocalStorageManager
 import net.typeblog.shelter.util.Utility
 
@@ -165,6 +168,7 @@ class AppListFragment : BaseFragment() {
         val title = TextView(context).apply {
             text = getString(R.string.app_context_menu_title, app.getLabel())
             setTextAppearance(context, androidx.appcompat.R.style.TextAppearance_AppCompat_Title)
+            setTextColor(ContextCompat.getColor(context, R.color.zindanLightYellow))
             setPadding(0, 0, 0, rowPad)
         }
         layout.addView(title)
@@ -180,7 +184,7 @@ class AppListFragment : BaseFragment() {
         for (entry in entries) {
             val row = TextView(context).apply {
                 text = if (entry.checkable) {
-                    (if (entry.checked) "✓ " else "   ") + entry.label
+                    (if (entry.checked) "тЬУ " else "   ") + entry.label
                 } else {
                     entry.label
                 }
@@ -208,15 +212,18 @@ class AppListFragment : BaseFragment() {
 
     private fun buildAppMenuEntries(app: ApplicationInfoWrapper): List<AppMenuEntry> {
         val entries = ArrayList<AppMenuEntry>()
+        val autoFreezeEnabled = AutoFreezePolicy.isInAutoFreezeList(app.getPackageName())
         if (isRemote) {
             if (!app.isSystem()) {
                 entries.add(AppMenuEntry(MENU_ITEM_CLONE, getString(R.string.clone_to_main_profile)))
             }
             if (app.isHidden()) {
                 entries.add(AppMenuEntry(MENU_ITEM_UNFREEZE, getString(R.string.unfreeze_app)))
-                entries.add(AppMenuEntry(MENU_ITEM_LAUNCH, getString(R.string.unfreeze_and_launch)))
+                entries.add(AppMenuEntry(MENU_ITEM_LAUNCH, getString(R.string.launch)))
             } else {
-                entries.add(AppMenuEntry(MENU_ITEM_FREEZE, getString(R.string.freeze_app)))
+                if (autoFreezeEnabled) {
+                    entries.add(AppMenuEntry(MENU_ITEM_FREEZE, getString(R.string.freeze_app)))
+                }
                 entries.add(AppMenuEntry(MENU_ITEM_LAUNCH, getString(R.string.launch)))
             }
             entries.add(
@@ -263,20 +270,32 @@ class AppListFragment : BaseFragment() {
     private fun onAppMenuItemSelected(itemId: Int, app: ApplicationInfoWrapper, checked: Boolean) {
         when (itemId) {
             MENU_ITEM_CLONE -> {
-                if (Utility.isMIUI() && !app.isSystem()) {
-                    AlertDialog.Builder(requireContext())
-                        .setMessage(R.string.miui_cannot_clone)
-                        .setPositiveButton(android.R.string.ok, null)
-                        .setNegativeButton(R.string.continue_anyway) { _, _ ->
-                            installOrUninstall(app, true)
-                        }
-                        .show()
+                val cloneAction = Runnable {
+                    if (Utility.isMIUI() && !app.isSystem()) {
+                        AlertDialog.Builder(requireContext())
+                            .setMessage(R.string.miui_cannot_clone)
+                            .setPositiveButton(android.R.string.ok, null)
+                            .setNegativeButton(R.string.continue_anyway) { _, _ ->
+                                installOrUninstall(app, true)
+                            }
+                            .show()
+                    } else {
+                        installOrUninstall(app, true)
+                    }
+                }
+                if (!isRemote) {
+                    (activity as MainActivity).runAfterVpnGateCleared(
+                        app.getPackageName(),
+                        forceGate = true,
+                        cloneAction
+                    )
                 } else {
-                    installOrUninstall(app, true)
+                    cloneAction.run()
                 }
             }
             MENU_ITEM_UNINSTALL -> installOrUninstall(app, false)
             MENU_ITEM_FREEZE -> {
+                AntiSpyManager.syncAutoFreezeListToWorkProfile(requireContext())
                 try {
                     service!!.freezeApp(app)
                 } catch (_: RemoteException) {
@@ -288,15 +307,26 @@ class AppListFragment : BaseFragment() {
                 refresh()
             }
             MENU_ITEM_UNFREEZE -> {
-                try {
-                    service!!.unfreezeApp(app)
-                } catch (_: RemoteException) {
+                val unfreezeAction = Runnable {
+                    try {
+                        service!!.unfreezeApp(app)
+                    } catch (_: RemoteException) {
+                    }
+                    ZindanToast.show(
+                        requireContext(),
+                        getString(R.string.unfreeze_success, app.getLabel()),
+                    )
+                    refresh()
                 }
-                ZindanToast.show(
-                    requireContext(),
-                    getString(R.string.unfreeze_success, app.getLabel()),
-                )
-                refresh()
+                if (AutoFreezePolicy.isInAutoFreezeList(app.getPackageName())) {
+                    (activity as MainActivity).runAfterVpnGateCleared(
+                        app.getPackageName(),
+                        forceGate = false,
+                        unfreezeAction
+                    )
+                } else {
+                    unfreezeAction.run()
+                }
             }
             MENU_ITEM_LAUNCH -> {
                 val intent = Intent(DummyActivity.UNFREEZE_AND_LAUNCH).apply {
@@ -316,6 +346,16 @@ class AppListFragment : BaseFragment() {
                         LocalStorageManager.PREF_AUTO_FREEZE_LIST_WORK_PROFILE, app.getPackageName()
                     )
                     AntiSpyManager.syncAutoFreezeListToWorkProfile(requireContext())
+                    if (app.isHidden()) {
+                        try {
+                            service!!.unfreezeApp(app)
+                        } catch (_: RemoteException) {
+                        }
+                        ZindanToast.show(
+                            requireContext(),
+                            getString(R.string.unfreeze_success, app.getLabel()),
+                        )
+                    }
                 }
                 LocalBroadcastManager.getInstance(requireContext())
                     .sendBroadcast(Intent(BROADCAST_REFRESH))
@@ -399,6 +439,7 @@ class AppListFragment : BaseFragment() {
                         )
                         knownWorkProfilePackages = currentSet
                         AntiSpyManager.syncAutoFreezeListToWorkProfile(requireContext())
+                        AutoFreezePolicy.migrateLegacyFrozenWithoutAutoFreeze(service!!, apps)
                         autoFreezePackages = HashSet(
                             LocalStorageManager.getInstance()
                                 .getStringList(LocalStorageManager.PREF_AUTO_FREEZE_LIST_WORK_PROFILE)
@@ -527,7 +568,6 @@ class AppListFragment : BaseFragment() {
             requireContext(), app.getPackageName(), linkedPackages
         )
         val id = Utility.unfreezeShortcutId(app.getPackageName(), linkedPackages)
-
         Utility.createLauncherShortcut(
             requireContext(), launchIntent,
             Icon.createWithBitmap(icon), id,

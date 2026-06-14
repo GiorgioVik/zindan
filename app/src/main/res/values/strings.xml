@@ -15,7 +15,7 @@
     <string name="setup_wizard_compatibility_text">Zindan is developed and tested on AOSP-like Android derivatives. This includes AOSP (Android Open Source Project), Google Android (on Pixels), and <b>most AOSP-based open-source custom ROMs</b> such as LineageOS. If your phone is running one of the Android derivatives listed above, then congratulations! Zindan is probably going to work correctly on your device.\n\nSome device vendors introduce very invasive customizations into the Android code base, resulting in conflicts, incompatibility and unexpected behavior. Some custom ROMs can also introduce compatibility-breaking changes, but generally these are rarer occurrences compared to phone vendor-introduced incompatibilities.\n\nZindan is merely an interface into the Work Profile feature provided by the system. If the feature provided by the system is broken or non-standard, <b>Zindan could not magically resolve the issue on its own</b>. If you are currently using a vendor-modified Android version that is known to break Work Profiles, <b>you have been warned</b>. You may proceed anyway, but there is no guarantee that Zindan would behave correctly under these circumstances.</string>
     <string name="setup_wizard_ready">Ready?</string>
     <string name="setup_wizard_ready_text">We are now ready to set up Zindan for you. If your device is running Android 7 or lower, please first ensure that your device is <b>not</b> in Do Not Disturb mode, because you will need to <b>click on a notification</b> later to finalize the setup process.\n\nWhen you are ready, click on \"Next\" to begin the setup process.</string>
-    <string name="setup_wizard_please_wait">Please wait…</string>
+    <string name="setup_wizard_please_wait">Please waitтАж</string>
     <string name="setup_wizard_please_wait_text">We are trying to initialize Work Profile and set up Zindan on your device.</string>
     <string name="setup_wizard_failed">Setup failed</string>
     <string name="setup_wizard_failed_text">We regret to inform you that we were not able to set up Zindan for you.\n\nIf your device already had a Work Profile, either from a previous installation of Zindan or from another application, you will have to remove that profile in Settings -> Account before Zindan can proceed.\n\nOtherwise, if you did not cancel the setup manually, then the reason for the failure is most commonly due to a heavily modified system, or a conflict between Zindan and other Work Profile managers. Unfortunately, there is not much that we could do about this.\n\nClick \"Next\" to exit.</string>
@@ -46,8 +46,8 @@
     <string name="freeze_app">Freeze</string>
     <string name="unfreeze_app">Unfreeze</string>
     <string name="launch">Launch</string>
-    <string name="create_unfreeze_shortcut">Create Unfreeze and/or Launch Shortcut</string>
-    <string name="unfreeze_and_launch">Unfreeze and Launch</string>
+    <string name="create_unfreeze_shortcut">Create Launch Shortcut</string>
+    <string name="unfreeze_and_launch">Launch</string>
     <string name="auto_freeze">Auto Freeze</string>
     <string name="anti_spy_vpn_block_title">VPN is active</string>
     <string name="anti_spy_vpn_block_launch_manual">Cannot launch the app. Turn off VPN manually and try again.</string>

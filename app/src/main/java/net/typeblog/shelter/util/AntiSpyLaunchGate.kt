@@ -27,6 +27,24 @@ object AntiSpyLaunchGate {
     fun needsVpnClear(context: Context, @Suppress("UNUSED_PARAMETER") storage: LocalStorageManager): Boolean =
         VpnTunnelDetector.isVpnActive(context.applicationContext)
 
+    fun shouldApplyVpnGate(packageName: String?, forceGate: Boolean = false): Boolean =
+        AutoFreezePolicy.shouldApplyVpnGate(packageName, forceGate)
+
+    fun runBeforeAutoFreezeAccess(
+        context: Context,
+        storage: LocalStorageManager,
+        packageName: String?,
+        forceGate: Boolean,
+        onProceed: Runnable,
+        onBlocked: BlockedCallback?
+    ) {
+        if (!shouldApplyVpnGate(packageName, forceGate)) {
+            onProceed.run()
+            return
+        }
+        runBeforeLaunch(context, storage, packageName ?: "", onProceed, onBlocked)
+    }
+
     fun runBeforeLaunch(
         context: Context,
         storage: LocalStorageManager,

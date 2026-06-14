@@ -2,6 +2,7 @@ package net.typeblog.shelter.services
 
 import android.content.Intent
 import android.net.VpnService
+import android.os.Build
 import android.os.IBinder
 import android.os.ParcelFileDescriptor
 import android.os.Process
@@ -12,7 +13,7 @@ import java.io.IOException
 
 /**
  * Brief pseudo-VPN to displace an active third-party tunnel (same approach as kick_vpns).
- * No foreground notification — the tunnel lives only for a few hundred milliseconds.
+ * No foreground notification тАФ the tunnel lives only for a few hundred milliseconds.
  */
 class AntiSpyDummyVpnService : VpnService() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -52,12 +53,13 @@ class AntiSpyDummyVpnService : VpnService() {
         }
 
         try {
-            val tunnel = Builder()
+            val builder = Builder()
                 .setSession(getString(R.string.anti_spy_dummy_vpn_session))
                 .addAddress("10.255.255.1", 32)
-                .setBlocking(false)
-                .setMtu(1280)
-                .establish()
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+                builder.setBlocking(false)
+            }
+            val tunnel = builder.establish()
             if (tunnel == null) {
                 Log.w(TAG, "establish() returned null")
                 notifyFailed()
@@ -82,6 +84,7 @@ class AntiSpyDummyVpnService : VpnService() {
             }
             sTunnel = null
         }
+        notifyDisconnected()
         stopSelf()
     }
 
@@ -95,6 +98,10 @@ class AntiSpyDummyVpnService : VpnService() {
 
     private fun notifyPermissionRequired() {
         sendStatusBroadcast(BROADCAST_PERMISSION_REQUIRED)
+    }
+
+    private fun notifyDisconnected() {
+        sendStatusBroadcast(BROADCAST_DISCONNECTED)
     }
 
     /** LocalBroadcastManager for main process; package broadcast for `:vpnwatch`. */
@@ -125,6 +132,8 @@ class AntiSpyDummyVpnService : VpnService() {
         const val BROADCAST_FAILED = "net.typeblog.shelter.broadcast.ANTI_SPY_DUMMY_VPN_FAILED"
         const val BROADCAST_PERMISSION_REQUIRED =
             "net.typeblog.shelter.broadcast.ANTI_SPY_DUMMY_VPN_PERMISSION_REQUIRED"
+        const val BROADCAST_DISCONNECTED =
+            "net.typeblog.shelter.broadcast.ANTI_SPY_DUMMY_VPN_DISCONNECTED"
 
         @Volatile
         private var sTunnel: ParcelFileDescriptor? = null

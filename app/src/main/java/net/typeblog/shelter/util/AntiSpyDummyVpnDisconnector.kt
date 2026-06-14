@@ -29,7 +29,11 @@ object AntiSpyDummyVpnDisconnector {
     private const val MAX_ESTABLISH_ATTEMPTS = 4
     private const val HOLD_TUNNEL_MS = 500L
     private const val ESTABLISH_TIMEOUT_MS = 5000L
-    private const val WHOLE_OP_TIMEOUT_MS = 25000L
+    private const val DISCONNECT_TIMEOUT_MS = 5000L
+    private const val SETTLE_AFTER_DISCONNECT_MS = 400L
+    private const val VPN_CLEAR_POLL_MS = 100L
+    private const val VPN_CLEAR_MAX_WAIT_MS = 2000L
+    private const val WHOLE_OP_TIMEOUT_MS = 30000L
 
     private val suppressReactions = AtomicBoolean(false)
 
@@ -100,6 +104,7 @@ object AntiSpyDummyVpnDisconnector {
 
     private fun runOneDummyCycle(context: Context): Int {
         val established = AtomicBoolean(false)
+        val disconnected = AtomicBoolean(false)
         val failed = AtomicBoolean(false)
         val permissionRequired = AtomicBoolean(false)
         val lock = Object()
@@ -108,6 +113,7 @@ object AntiSpyDummyVpnDisconnector {
             override fun onReceive(ctx: Context, intent: Intent) {
                 when (intent.action) {
                     AntiSpyDummyVpnService.BROADCAST_ESTABLISHED -> established.set(true)
+                    AntiSpyDummyVpnService.BROADCAST_DISCONNECTED -> disconnected.set(true)
                     AntiSpyDummyVpnService.BROADCAST_PERMISSION_REQUIRED ->
                         permissionRequired.set(true)
                     AntiSpyDummyVpnService.BROADCAST_FAILED -> failed.set(true)
@@ -120,6 +126,7 @@ object AntiSpyDummyVpnDisconnector {
 
         val filter = IntentFilter().apply {
             addAction(AntiSpyDummyVpnService.BROADCAST_ESTABLISHED)
+            addAction(AntiSpyDummyVpnService.BROADCAST_DISCONNECTED)
             addAction(AntiSpyDummyVpnService.BROADCAST_FAILED)
             addAction(AntiSpyDummyVpnService.BROADCAST_PERMISSION_REQUIRED)
         }
@@ -157,9 +164,15 @@ object AntiSpyDummyVpnDisconnector {
 
             sleep(HOLD_TUNNEL_MS)
 
+            disconnected.set(false)
             startDummyService(app, AntiSpyDummyVpnService.ACTION_DISCONNECT)
 
-            return if (!VpnTunnelDetector.isVpnActive(context)) {
+            if (!waitForSignal(disconnected, lock, DISCONNECT_TIMEOUT_MS)) {
+                Log.w(TAG, "dummy vpn disconnect timed out pid=${Process.myPid()}")
+                return RESULT_FAILED
+            }
+
+            return if (isVpnClearedAfterDisconnect(context)) {
                 RESULT_CLEARED
             } else {
                 Log.w(TAG, "vpn still active after dummy cycle pid=${Process.myPid()}")
@@ -238,6 +251,37 @@ object AntiSpyDummyVpnDisconnector {
                 ContextCompat.RECEIVER_NOT_EXPORTED
             )
         }
+    }
+
+    private fun waitForSignal(signal: AtomicBoolean, lock: Object, timeoutMs: Long): Boolean {
+        synchronized(lock) {
+            val deadline = System.currentTimeMillis() + timeoutMs
+            while (!signal.get()) {
+                val wait = deadline - System.currentTimeMillis()
+                if (wait <= 0) {
+                    return false
+                }
+                try {
+                    lock.wait(wait)
+                } catch (e: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    return false
+                }
+            }
+        }
+        return true
+    }
+
+    private fun isVpnClearedAfterDisconnect(context: Context): Boolean {
+        sleep(SETTLE_AFTER_DISCONNECT_MS)
+        val deadline = System.currentTimeMillis() + VPN_CLEAR_MAX_WAIT_MS
+        while (System.currentTimeMillis() < deadline) {
+            if (!VpnTunnelDetector.isVpnActive(context)) {
+                return true
+            }
+            sleep(VPN_CLEAR_POLL_MS)
+        }
+        return !VpnTunnelDetector.isVpnActive(context)
     }
 
     private fun startDummyService(app: Context, action: String) {

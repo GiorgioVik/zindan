@@ -1,5 +1,6 @@
 package net.typeblog.shelter.ui
 
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.drawable.Drawable
 import android.os.Handler
@@ -110,13 +111,23 @@ class AppListAdapter(
 
         private fun updateTitleTextColor(info: ApplicationInfoWrapper) {
             val onDarkBackground = info.isHidden() ||
-                (multiSelectMode && selectedIndices.contains(itemIndex))
+                (multiSelectMode && selectedIndices.contains(itemIndex)) ||
+                isDarkListBackground(itemView.context)
             val titleColor = if (onDarkBackground) {
                 R.color.colorTextPrimary
             } else {
                 R.color.colorTextOnLight
             }
             title.setTextColor(ContextCompat.getColor(itemView.context, titleColor))
+        }
+
+        private fun isDarkListBackground(context: Context): Boolean {
+            val primary = ContextCompat.getColor(context, R.color.colorPrimary)
+            val r = android.graphics.Color.red(primary) / 255f
+            val g = android.graphics.Color.green(primary) / 255f
+            val b = android.graphics.Color.blue(primary) / 255f
+            val luminance = 0.2126f * r + 0.7152f * g + 0.0722f * b
+            return luminance < 0.4f
         }
 
         private fun setUnselectedBackground() {
@@ -192,7 +203,11 @@ class AppListAdapter(
     private val origList = ArrayList<ApplicationInfoWrapper>()
     private val list = ArrayList<ApplicationInfoWrapper>()
     private var searchQuery: String? = null
-    private val iconCache = HashMap<String, Bitmap>()
+    private val iconCache = object : LinkedHashMap<String, Bitmap>(16, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Bitmap>?): Boolean {
+            return size > MAX_ICON_CACHE_ENTRIES
+        }
+    }
     private var contextMenuHandler: ContextMenuHandler? = null
     private var actionModeHandler: ActionModeHandler? = null
     private var actionModeCancelHandler: ActionModeCancelHandler? = null
@@ -289,5 +304,9 @@ class AppListAdapter(
     override fun onViewRecycled(holder: ViewHolder) {
         super.onViewRecycled(holder)
         holder.setIndex(-1)
+    }
+
+    companion object {
+        private const val MAX_ICON_CACHE_ENTRIES = 80
     }
 }
