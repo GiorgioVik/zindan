@@ -88,6 +88,8 @@ class MainActivity : AppCompatActivity() {
     private var pendingVpnBlockReason = 0
     private var pendingLaunchPackageName: String? = null
     private var pendingBatchAction: String? = null
+    private var mainAppListFragment: AppListFragment? = null
+    private var workAppListFragment: AppListFragment? = null
 
     private val antiSpyVpnBlockReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -101,6 +103,12 @@ class MainActivity : AppCompatActivity() {
             }
             pendingVpnBlockReason = reason
             showAntiSpyVpnLaunchBlockedDialog(reason)
+        }
+    }
+
+    private val appListRefreshReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            refreshAppLists()
         }
     }
 
@@ -136,6 +144,11 @@ class MainActivity : AppCompatActivity() {
             .registerReceiver(
                 antiSpyVpnBlockReceiver,
                 IntentFilter(AntiSpyLaunchGate.BROADCAST_LAUNCH_BLOCKED_VPN)
+            )
+        LocalBroadcastManager.getInstance(this)
+            .registerReceiver(
+                appListRefreshReceiver,
+                IntentFilter(AppListFragment.BROADCAST_REFRESH)
             )
 
         init()
@@ -353,7 +366,9 @@ class MainActivity : AppCompatActivity() {
         pager.adapter = object : FragmentStateAdapter(this) {
             override fun createFragment(position: Int): Fragment = when (position) {
                 0 -> AppListFragment.newInstance(serviceMain!!, false)
+                    .also { mainAppListFragment = it }
                 1 -> AppListFragment.newInstance(serviceWork!!, true)
+                    .also { workAppListFragment = it }
                 else -> throw RuntimeException("How did this happen?")
             }
 
@@ -440,6 +455,8 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         LocalBroadcastManager.getInstance(this)
             .unregisterReceiver(antiSpyVpnBlockReceiver)
+        LocalBroadcastManager.getInstance(this)
+            .unregisterReceiver(appListRefreshReceiver)
         super.onDestroy()
         if (!restarting) {
             doOnDestroy()
@@ -631,9 +648,24 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun refreshAppLists() {
-        LocalBroadcastManager.getInstance(this)
-            .sendBroadcast(Intent(AppListFragment.BROADCAST_REFRESH))
+    fun refreshAppLists() {
+        val fragments = LinkedHashSet<AppListFragment>()
+        mainAppListFragment?.let { fragments.add(it) }
+        workAppListFragment?.let { fragments.add(it) }
+        for (tag in APP_LIST_FRAGMENT_TAGS) {
+            (supportFragmentManager.findFragmentByTag(tag) as? AppListFragment)?.let { fragments.add(it) }
+        }
+        for (fragment in fragments) {
+            fragment.refresh()
+        }
+    }
+
+    fun scheduleAppListRefresh(followUpAfterInstall: Boolean = false) {
+        refreshAppLists()
+        Utility.scheduleAppListRefresh(this)
+        if (followUpAfterInstall) {
+            window.decorView.postDelayed({ refreshAppLists() }, APP_LIST_INSTALL_REFRESH_MS)
+        }
     }
 
     private fun onApkSelected(uri: Uri?) {
@@ -649,6 +681,7 @@ class MainActivity : AppCompatActivity() {
                                 R.string.install_app_to_profile_success,
                                 android.widget.Toast.LENGTH_LONG,
                             )
+                            scheduleAppListRefresh(followUpAfterInstall = true)
                         }
                     }
                 }
@@ -676,5 +709,7 @@ class MainActivity : AppCompatActivity() {
             "net.typeblog.shelter.broadcast.CONTEXT_MENU_CLOSED"
         const val BROADCAST_SEARCH_FILTER_CHANGED =
             "net.typeblog.shelter.broadcast.SEARCH_FILTER_CHANGED"
+        private val APP_LIST_FRAGMENT_TAGS = arrayOf("f0", "f1")
+        private const val APP_LIST_INSTALL_REFRESH_MS = 2000L
     }
 }

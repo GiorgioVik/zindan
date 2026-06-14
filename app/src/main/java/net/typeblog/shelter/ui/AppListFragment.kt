@@ -50,6 +50,7 @@ class AppListFragment : BaseFragment() {
     private var service: IShelterService? = null
     private var isRemote = false
     private var refreshing = false
+    private var refreshPending = false
     private var defaultIcon: Drawable? = null
     private var selectedApp: ApplicationInfoWrapper? = null
 
@@ -391,9 +392,17 @@ class AppListFragment : BaseFragment() {
         }
     }
 
+    private fun requestAppListRefresh(followUpAfterInstall: Boolean = false) {
+        (activity as? MainActivity)?.scheduleAppListRefresh(followUpAfterInstall)
+            ?: Utility.scheduleAppListRefresh(requireContext())
+    }
+
     fun refresh() {
         if (adapter == null) return
-        if (refreshing) return
+        if (refreshing) {
+            refreshPending = true
+            return
+        }
         if (adapter!!.isMultiSelectMode()) {
             swipeRefresh!!.isRefreshing = false
             return
@@ -451,16 +460,26 @@ class AppListFragment : BaseFragment() {
                     }
                     val freezePackages = autoFreezePackages
                     runOnUiThread {
+                        if (!isAdded) {
+                            refreshing = false
+                            return@runOnUiThread
+                        }
                         swipeRefresh!!.isRefreshing = false
                         adapter!!.setData(apps)
                         if (freezePackages != null) {
                             adapter!!.setAutoFreezePackages(freezePackages)
                         }
                         refreshing = false
+                        if (refreshPending) {
+                            refreshPending = false
+                            refresh()
+                        }
                     }
                 }
             }, (activity as MainActivity).showAll)
         } catch (_: RemoteException) {
+            refreshing = false
+            swipeRefresh!!.isRefreshing = false
         }
     }
 
@@ -535,8 +554,7 @@ class AppListFragment : BaseFragment() {
                     app.getPackageName()
                 )
             }
-            LocalBroadcastManager.getInstance(requireContext())
-                .sendBroadcast(Intent(BROADCAST_REFRESH))
+            requestAppListRefresh(followUpAfterInstall = isInstall && !isRemote)
         } else if (result == ShelterService.RESULT_CANNOT_INSTALL_SYSTEM_APP) {
             ZindanToast.show(
                 requireContext(),

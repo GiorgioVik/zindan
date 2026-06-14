@@ -18,7 +18,6 @@ import net.typeblog.shelter.ShelterApplication
 import net.typeblog.shelter.receivers.ShelterDeviceAdminReceiver
 import net.typeblog.shelter.ui.DummyActivity
 import net.typeblog.shelter.util.ApplicationInfoWrapper
-import net.typeblog.shelter.util.AutoFreezePolicy
 import net.typeblog.shelter.util.FileProviderProxy
 import net.typeblog.shelter.util.UriForwardProxy
 import net.typeblog.shelter.util.Utility
@@ -164,9 +163,6 @@ class ShelterService : Service() {
 
         override fun freezeApp(app: ApplicationInfoWrapper) {
             check(isProfileOwner) { "Cannot freeze app without being profile owner" }
-            if (!AutoFreezePolicy.isInAutoFreezeList(app.getPackageName())) {
-                return
-            }
             policyManager!!.setApplicationHidden(adminComponent!!, app.getPackageName(), true)
         }
 
