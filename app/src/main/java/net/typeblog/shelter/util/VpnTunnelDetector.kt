@@ -44,7 +44,8 @@ object VpnTunnelDetector {
 
     private fun hasTunnelInterface(): Boolean {
         try {
-            for (ni in Collections.list(NetworkInterface.getNetworkInterfaces())) {
+            val interfaces = NetworkInterface.getNetworkInterfaces() ?: return false
+            for (ni in Collections.list(interfaces)) {
                 if (!ni.isUp || ni.isLoopback) continue
                 val name = ni.name ?: continue
                 if (TUNNEL_NAME.matcher(name.lowercase(Locale.US)).matches()) {

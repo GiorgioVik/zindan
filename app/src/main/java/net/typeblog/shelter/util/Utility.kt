@@ -109,6 +109,20 @@ object Utility {
             if (profile == self) {
                 continue
             }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                try {
+                    val startFgAsUser = Context::class.java.getMethod(
+                        "startForegroundServiceAsUser",
+                        Intent::class.java,
+                        UserHandle::class.java
+                    )
+                    startFgAsUser.invoke(context, intent, profile)
+                    Log.i(TAG, "startForegroundServiceAsUser ok: ${intent.component}")
+                    return true
+                } catch (e: Exception) {
+                    Log.d(TAG, "startForegroundServiceAsUser unavailable, fallback", e)
+                }
+            }
             try {
                 val startAsUser = Context::class.java.getMethod(
                     "startServiceAsUser",
@@ -205,6 +219,27 @@ object Utility {
         }, APP_LIST_REFRESH_DELAY_MS)
     }
 
+    /** Refresh main-profile app lists after a freeze/unfreeze in the work profile. */
+    fun scheduleAppListRefreshOnMainProfile(context: Context) {
+        val dpm = context.getSystemService(android.app.admin.DevicePolicyManager::class.java)
+        if (dpm == null || !dpm.isProfileOwnerApp(context.packageName)) {
+            scheduleAppListRefresh(context)
+            return
+        }
+        try {
+            val intent = Intent(context, MainActivity::class.java).apply {
+                action = MainActivity.ACTION_REFRESH_APP_LISTS
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            }
+            transferIntentToProfile(context, intent)
+            AuthenticationUtility.signIntent(intent)
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            Log.w(TAG, "scheduleAppListRefreshOnMainProfile failed", e)
+            scheduleAppListRefresh(context)
+        }
+    }
+
     fun showToastOnMainProfile(context: Context, resId: Int) {
         val dpm = context.getSystemService(android.app.admin.DevicePolicyManager::class.java)
         if (dpm == null || !dpm.isProfileOwnerApp(context.packageName)) {
@@ -212,24 +247,17 @@ object Utility {
             return
         }
         try {
-            val useMainActivity = MainActivity.isResumed
-            val intent = if (useMainActivity) {
-                Intent(context, MainActivity::class.java).apply {
-                    action = MainActivity.ACTION_SHOW_BATCH_TOAST
-                    putExtra(MainActivity.EXTRA_TOAST_RES_ID, resId)
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                }
-            } else {
-                Intent(context, DummyActivity::class.java).apply {
-                    action = DummyActivity.SHOW_TOAST
-                    putExtra(MainActivity.EXTRA_TOAST_RES_ID, resId)
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                }
+            // Action-only intent (no explicit component) so the system cross-profile forwarder
+            // resolves it to the personal-profile DummyActivity. An explicit component would
+            // bind to the (disabled) work-profile activity and break forwarding.
+            val intent = Intent(DummyActivity.SHOW_TOAST).apply {
+                putExtra(MainActivity.EXTRA_TOAST_RES_ID, resId)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
             }
             transferIntentToProfile(context, intent)
-            AuthenticationUtility.signIntent(intent)
             context.startActivity(intent)
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Log.w(TAG, "showToastOnMainProfile failed", e)
             ZindanToast.show(context, resId)
         }
     }
@@ -333,6 +361,16 @@ object Utility {
             DevicePolicyManager.FLAG_MANAGED_CAN_ACCESS_PARENT
         )
 
+        // Allow the work profile (profile owner) to surface a toast + refresh on the personal
+        // profile after a background batch-freeze (e.g. VPN-triggered auto-freeze). This is a
+        // work->personal forward, which on this platform requires FLAG_PARENT_CAN_ACCESS_MANAGED
+        // (mirrors the working PUBLIC_FREEZE_ALL/FINALIZE_PROVISION forwards below).
+        manager.addCrossProfileIntentFilter(
+            adminComponent,
+            IntentFilter(DummyActivity.SHOW_TOAST),
+            DevicePolicyManager.FLAG_PARENT_CAN_ACCESS_MANAGED
+        )
+
         manager.addCrossProfileIntentFilter(
             adminComponent,
             IntentFilter(DummyActivity.ENABLE_AUTO_FREEZE_WORK_PROFILE),
@@ -387,10 +425,13 @@ object Utility {
             DevicePolicyManager.FLAG_MANAGED_CAN_ACCESS_PARENT
         )
 
+        // syncAutoFreezeListToWorkProfile is fired from the personal profile toward the work
+        // profile, so it needs the personal->work direction (FLAG_MANAGED_CAN_ACCESS_PARENT on
+        // this platform). The previous flag never resolved and spammed IllegalStateException.
         manager.addCrossProfileIntentFilter(
             adminComponent,
             IntentFilter(DummyActivity.SYNC_ANTI_SPY_VPN_WATCH),
-            DevicePolicyManager.FLAG_PARENT_CAN_ACCESS_MANAGED
+            DevicePolicyManager.FLAG_MANAGED_CAN_ACCESS_PARENT
         )
 
         manager.addCrossProfileIntentFilter(

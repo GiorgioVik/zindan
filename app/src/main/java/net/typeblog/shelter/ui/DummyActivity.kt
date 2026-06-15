@@ -578,6 +578,9 @@ class DummyActivity : Activity() {
         if (resId != 0) {
             ZindanToast.show(this, resId)
         }
+        // The toast is forwarded from the work profile after a background batch-freeze. Refresh
+        // the personal-profile app list too, so the frozen state shows without reopening the app.
+        Utility.scheduleAppListRefresh(this)
         finishBatchShortcutFlow()
     }
 
@@ -682,12 +685,18 @@ class DummyActivity : Activity() {
                 finish()
                 return
             }
+            // Persist the authoritative list into the work profile so the work-profile VPN
+            // watcher can freeze on its own when a VPN comes up later (it is the only context
+            // privileged to call DevicePolicyManager; cross-profile starts from personal are denied).
+            LocalStorageManager.getInstance()
+                .setStringList(LocalStorageManager.PREF_AUTO_FREEZE_LIST_WORK_PROFILE, list)
+            AntiSpyVpnWatchService.syncState(this)
             val frozen = WorkProfileBatchFreeze.freezeList(this, list)
             if (frozen > 0) {
                 Utility.postVpnAutoFreezeSuccessAlert(this)
+                // showToastOnMainProfile also triggers an app-list refresh on the personal profile.
                 Utility.showToastOnMainProfile(this, R.string.freeze_all_success)
             }
-            Utility.scheduleAppListRefresh(this)
             finish()
         } else {
             finish()

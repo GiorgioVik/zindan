@@ -134,6 +134,13 @@
             </intent-filter>
         </receiver>
 
+        <receiver android:name=".receivers.AntiSpyVpnFreezeReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="net.typeblog.shelter.action.VPN_BATCH_FREEZE" />
+            </intent-filter>
+        </receiver>
+
         <receiver android:name=".receivers.WorkProfilePackageAddedReceiver"
             android:exported="true"
             android:enabled="true">
@@ -210,7 +217,8 @@
 
         <service android:name=".services.BatchFreezeService"
             android:exported="false"
-            android:stopWithTask="false">
+            android:stopWithTask="false"
+            android:foregroundServiceType="systemExempted">
             <intent-filter>
                 <action android:name="net.typeblog.shelter.action.BATCH_FREEZE_WORK" />
             </intent-filter>

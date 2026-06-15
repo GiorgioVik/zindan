@@ -26,11 +26,11 @@ import net.typeblog.shelter.util.AntiSpyVpnPromptManager
 import net.typeblog.shelter.util.LocalStorageManager
 import net.typeblog.shelter.util.Utility
 import net.typeblog.shelter.util.VpnTunnelDetector
+import net.typeblog.shelter.util.WorkProfileBatchFreeze
 import net.typeblog.shelter.util.ZindanToast
 
 /**
- * Background VPN watcher while Anti Spy (golden shield) is on.
- * Runs batch freeze when VPN appears (MacroDroid-style NetworkCallback).
+ * Background VPN watcher. Batch-freeze on VPN-up is triggered from the main profile.
  */
 class AntiSpyVpnWatchService : Service() {
     private var connectivityManager: ConnectivityManager? = null
@@ -42,6 +42,8 @@ class AntiSpyVpnWatchService : Service() {
     private var vpnPresent = false
     private var foregroundStarted = false
     private var connectivityReceiver: BroadcastReceiver? = null
+    private var vpnFreezeInFlight = false
+    private var vpnFreezeDoneForSession = false
 
     override fun onCreate() {
         super.onCreate()
@@ -67,6 +69,14 @@ class AntiSpyVpnWatchService : Service() {
             }
         } else if (!active && vpnPresent) {
             onVpnStateChanged(false)
+        } else if (active && !isMainProfileWatcher() &&
+            !vpnFreezeDoneForSession &&
+            !AntiSpyDummyVpnDisconnector.isSuppressingVpnReactions()
+        ) {
+            // Edge-based triggering misses the case where the work watcher starts with the VPN
+            // already up, or the VPN network churns (new netId) without ever dropping to false.
+            // Re-attempt the freeze on each poll until it has run once for this VPN session.
+            handler.post(freezeRunnable)
         }
         handler.postDelayed(pollRunnable, VPN_POLL_MS)
     }
@@ -170,10 +180,15 @@ class AntiSpyVpnWatchService : Service() {
     }
 
     private fun onVpnStateChanged(vpnActive: Boolean) {
+        if (AntiSpyDummyVpnDisconnector.isSuppressingVpnReactions()) {
+            Log.d(TAG, "vpn state ignored during displacement")
+            return
+        }
         if (vpnActive == vpnPresent) return
         vpnPresent = vpnActive
         handler.removeCallbacks(freezeRunnable)
         if (!vpnActive) {
+            vpnFreezeDoneForSession = false
             AntiSpyVpnPromptManager.onVpnSessionEnded()
             if (isMainProfileWatcher()) {
                 postVpnStateAlert(R.string.anti_spy_vpn_alert_disconnected_text)
@@ -207,9 +222,42 @@ class AntiSpyVpnWatchService : Service() {
             return
         }
         VpnTunnelDetector.logDiagnostics(this)
-        Log.i(TAG, "VPN detected, batch-freezing auto-freeze list (VPN stays connected)")
-        AntiSpyManager.freezeAllForVpn(this)
-        Utility.showToastOnMainProfile(this, R.string.freeze_all_success)
+
+        if (isMainProfileWatcher()) {
+            // The personal profile has no privilege to freeze work-profile apps and cannot
+            // start a service/activity across profiles from the background. Only the work-profile
+            // watcher (profile owner) can freeze directly via DevicePolicyManager, so it owns this.
+            postFreezeDiagnostic("MAIN: VPN ON (морозит work-профиль)")
+            return
+        }
+
+        // Work profile is the profile owner: freeze directly via DevicePolicyManager.
+        val list = AntiSpyManager.getAutoFreezeList(this)
+        if (list.isEmpty()) {
+            // List is synced into work prefs whenever FREEZE_ALL_IN_LIST runs (startup/manual).
+            postFreezeDiagnostic("WORK: список пуст — открой Zindan один раз")
+            return
+        }
+        if (vpnFreezeInFlight) return
+        vpnFreezeInFlight = true
+        // Mark the session as handled so the poll loop stops re-attempting until VPN drops.
+        vpnFreezeDoneForSession = true
+        try {
+            val frozen = WorkProfileBatchFreeze.freezeList(this, list)
+            Log.i(TAG, "VPN batch-freeze in work profile: $frozen of ${list.size}")
+            if (frozen > 0) {
+                postFreezeDiagnostic("WORK: заморожено $frozen из ${list.size}")
+                // showToastOnMainProfile also triggers an app-list refresh on the personal profile.
+                Utility.showToastOnMainProfile(this, R.string.freeze_all_success)
+            }
+        } finally {
+            handler.postDelayed({ vpnFreezeInFlight = false }, 1500L)
+        }
+    }
+
+    private fun postFreezeDiagnostic(text: String) {
+        val id = if (isMainProfileWatcher()) DIAG_MAIN_NOTIFICATION_ID else DIAG_WORK_NOTIFICATION_ID
+        Utility.postUserAlert(this, id, "Zindan VPN-диагностика", text)
     }
 
     private fun scanVpnActive(): Boolean = VpnTunnelDetector.isVpnActive(this)
@@ -272,8 +320,10 @@ class AntiSpyVpnWatchService : Service() {
             }
             val am = app.getSystemService(AlarmManager::class.java) ?: return
             val trigger = SystemClock.elapsedRealtime() + 1500
+            // setAndAllowWhileIdle is inexact and does NOT require SCHEDULE_EXACT_ALARM /
+            // USE_EXACT_ALARM, which newer Android no longer grants by default.
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                am.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, trigger, pi)
+                am.setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, trigger, pi)
             } else {
                 am.set(AlarmManager.ELAPSED_REALTIME_WAKEUP, trigger, pi)
             }
@@ -289,6 +339,8 @@ class AntiSpyVpnWatchService : Service() {
         private const val TAG = "AntiSpyVpnWatch"
         private const val NOTIFICATION_ID = 0xe49d0
         private const val VPN_STATE_NOTIFICATION_ID = 0xe49d1
+        private const val DIAG_MAIN_NOTIFICATION_ID = 0xe49da
+        private const val DIAG_WORK_NOTIFICATION_ID = 0xe49db
         private const val VPN_POLL_MS = 2000L
 
         fun syncState(context: Context) {

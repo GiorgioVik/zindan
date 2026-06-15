@@ -27,15 +27,19 @@ object WorkProfileBatchFreeze {
         }
         val dpm = context.getSystemService(DevicePolicyManager::class.java) ?: return 0
         val admin = ComponentName(context, ShelterDeviceAdminReceiver::class.java)
-        var frozen = 0
+        var newlyFrozen = 0
+        var alreadyHidden = 0
         for (pkg in normalized) {
             if (pkg.isEmpty()) {
                 continue
             }
             try {
-                val alreadyHidden = dpm.isApplicationHidden(admin, pkg)
-                if (alreadyHidden || dpm.setApplicationHidden(admin, pkg, true)) {
-                    frozen++
+                if (dpm.isApplicationHidden(admin, pkg)) {
+                    alreadyHidden++
+                    continue
+                }
+                if (dpm.setApplicationHidden(admin, pkg, true)) {
+                    newlyFrozen++
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "failed to freeze $pkg", e)
@@ -45,8 +49,11 @@ object WorkProfileBatchFreeze {
             context.stopService(Intent(context, FreezeService::class.java))
         } catch (_: Exception) {
         }
-        Log.i(TAG, "frozen $frozen of ${normalized.size} packages")
-        return frozen
+        Log.i(
+            TAG,
+            "newly frozen $newlyFrozen, already hidden $alreadyHidden, of ${normalized.size} packages"
+        )
+        return newlyFrozen
     }
 
     /** Same list as the snowflake button; delegates to [AntiSpyManager.getAutoFreezeList]. */

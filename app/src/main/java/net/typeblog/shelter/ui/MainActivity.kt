@@ -172,6 +172,7 @@ class MainActivity : AppCompatActivity() {
             ACTION_BATCH_FREEZE_ALL,
             ACTION_BATCH_UNFREEZE_ALL,
             ACTION_SHOW_BATCH_TOAST,
+            ACTION_REFRESH_APP_LISTS,
         )
 
     private fun dispatchBackgroundShortcutAction(intent: Intent) {
@@ -184,6 +185,7 @@ class MainActivity : AppCompatActivity() {
                     ZindanToast.show(this, resId)
                 }
             }
+            ACTION_REFRESH_APP_LISTS -> refreshAppLists()
         }
     }
 
@@ -286,6 +288,7 @@ class MainActivity : AppCompatActivity() {
         when (pendingBatchAction) {
             ACTION_BATCH_FREEZE_ALL -> runBatchFreezeAll()
             ACTION_BATCH_UNFREEZE_ALL -> runBatchUnfreezeAll()
+            ACTION_REFRESH_APP_LISTS -> refreshAppLists()
         }
         pendingBatchAction = null
     }
@@ -314,6 +317,15 @@ class MainActivity : AppCompatActivity() {
                 val resId = intent.getIntExtra(EXTRA_TOAST_RES_ID, 0)
                 if (resId != 0) {
                     ZindanToast.show(this, resId)
+                }
+                return true
+            }
+            ACTION_REFRESH_APP_LISTS -> {
+                intent.action = Intent.ACTION_MAIN
+                if (servicesAlive()) {
+                    refreshAppLists()
+                } else {
+                    pendingBatchAction = ACTION_REFRESH_APP_LISTS
                 }
                 return true
             }
@@ -704,6 +716,7 @@ class MainActivity : AppCompatActivity() {
         const val ACTION_BATCH_FREEZE_ALL = "net.typeblog.shelter.action.BATCH_FREEZE_ALL"
         const val ACTION_BATCH_UNFREEZE_ALL = "net.typeblog.shelter.action.BATCH_UNFREEZE_ALL"
         const val ACTION_SHOW_BATCH_TOAST = "net.typeblog.shelter.action.SHOW_BATCH_TOAST"
+        const val ACTION_REFRESH_APP_LISTS = "net.typeblog.shelter.action.REFRESH_APP_LISTS"
         const val EXTRA_TOAST_RES_ID = "toast_res_id"
         const val BROADCAST_CONTEXT_MENU_CLOSED =
             "net.typeblog.shelter.broadcast.CONTEXT_MENU_CLOSED"
