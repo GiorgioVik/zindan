@@ -183,7 +183,7 @@ class AntiSpyVpnWatchService : Service() {
         if (isMainProfileWatcher()) {
             postVpnStateAlert(R.string.anti_spy_vpn_alert_connected_text)
         }
-        handler.postDelayed(freezeRunnable, FREEZE_DEBOUNCE_MS)
+        handler.post(freezeRunnable)
     }
 
     private fun isMainProfileWatcher(): Boolean = !AntiSpyManager.isWorkProfile(this)
@@ -197,42 +197,19 @@ class AntiSpyVpnWatchService : Service() {
 
     private fun maybeFreezeAllForVpn() {
         if (AntiSpyDummyVpnDisconnector.isSuppressingVpnReactions()) {
-            Log.d(TAG, "prompt skipped: dummy vpn cycle")
-            return
-        }
-        if (AntiSpyVpnPromptManager.isPromptActive()) {
-            Log.d(TAG, "prompt skipped: already showing")
-            return
-        }
-        if (AntiSpyVpnPromptManager.isDeclinedForCurrentVpnSession()) {
-            Log.d(TAG, "prompt skipped: user declined for this VPN session")
+            Log.d(TAG, "freeze skipped: dummy vpn cycle")
             return
         }
         if (!VpnTunnelDetector.isVpnActive(this)) {
-            Log.d(TAG, "prompt cancelled: vpn no longer active")
+            Log.d(TAG, "freeze cancelled: vpn no longer active")
             vpnPresent = false
             AntiSpyVpnPromptManager.onVpnSessionEnded()
             return
         }
         VpnTunnelDetector.logDiagnostics(this)
-        Log.i(TAG, "VPN detected, brief dummy displacement then user prompt")
-        AntiSpyDummyVpnDisconnector.tryClearVpnAsync(this) { result ->
-            if (AntiSpyVpnPromptManager.isDeclinedForCurrentVpnSession()) {
-                return@tryClearVpnAsync
-            }
-            if (AntiSpyVpnPromptManager.isPromptActive()) {
-                return@tryClearVpnAsync
-            }
-            Log.i(TAG, "dummy displacement result=$result")
-            when (result) {
-                AntiSpyDummyVpnDisconnector.RESULT_CLEARED ->
-                    AntiSpyVpnPromptManager.showPrompt(this)
-                AntiSpyDummyVpnDisconnector.RESULT_VPN_PERMISSION_REQUIRED ->
-                    AntiSpyVpnPromptManager.showVpnPermissionNeeded(this)
-                else ->
-                    AntiSpyVpnPromptManager.showDisplacementFailed(this)
-            }
-        }
+        Log.i(TAG, "VPN detected, batch-freezing auto-freeze list (VPN stays connected)")
+        AntiSpyManager.freezeAllForVpn(this)
+        Utility.showToastOnMainProfile(this, R.string.freeze_all_success)
     }
 
     private fun scanVpnActive(): Boolean = VpnTunnelDetector.isVpnActive(this)
@@ -312,7 +289,6 @@ class AntiSpyVpnWatchService : Service() {
         private const val TAG = "AntiSpyVpnWatch"
         private const val NOTIFICATION_ID = 0xe49d0
         private const val VPN_STATE_NOTIFICATION_ID = 0xe49d1
-        private const val FREEZE_DEBOUNCE_MS = 1500L
         private const val VPN_POLL_MS = 2000L
 
         fun syncState(context: Context) {
