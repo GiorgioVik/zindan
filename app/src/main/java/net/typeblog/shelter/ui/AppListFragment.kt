@@ -459,6 +459,9 @@ class AppListFragment : BaseFragment() {
                         )
                     }
                     val freezePackages = autoFreezePackages
+                    if (isRemote && freezePackages != null) {
+                        AutoFreezePolicy.sortWorkProfileApps(apps, freezePackages)
+                    }
                     runOnUiThread {
                         if (!isAdded) {
                             refreshing = false

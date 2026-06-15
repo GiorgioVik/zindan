@@ -38,5 +38,29 @@ object AutoFreezePolicy {
             }
         }
     }
+
+    /**
+     * Work profile list order: frozen → unfrozen with auto-freeze (snowflake) → rest; A–Z within tier.
+     */
+    fun sortWorkProfileApps(
+        apps: MutableList<ApplicationInfoWrapper>,
+        autoFreezePackages: Set<String>
+    ) {
+        apps.sortWith { x, y ->
+            val tierCompare = workProfileSortTier(x, autoFreezePackages)
+                .compareTo(workProfileSortTier(y, autoFreezePackages))
+            if (tierCompare != 0) {
+                return@sortWith tierCompare
+            }
+            x.getLabel()!!.compareTo(y.getLabel()!!, ignoreCase = true)
+        }
+    }
+
+    private fun workProfileSortTier(app: ApplicationInfoWrapper, autoFreezePackages: Set<String>): Int =
+        when {
+            app.isHidden() -> 0
+            autoFreezePackages.contains(app.getPackageName()) -> 1
+            else -> 2
+        }
 }
 
