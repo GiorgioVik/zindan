@@ -580,7 +580,7 @@ class DummyActivity : Activity() {
         }
         // The toast is forwarded from the work profile after a background batch-freeze. Refresh
         // the personal-profile app list too, so the frozen state shows without reopening the app.
-        Utility.scheduleAppListRefresh(this)
+        Utility.scheduleAppListRefresh(this, longArrayOf(700L, 2000L, 4500L))
         finishBatchShortcutFlow()
     }
 

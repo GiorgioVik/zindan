@@ -16,12 +16,19 @@ import net.typeblog.shelter.services.FreezeService
 object WorkProfileBatchFreeze {
     private const val TAG = "WorkProfileBatchFreeze"
 
+    private enum class FreezeOutcome {
+        NEWLY,
+        RECONCILED,
+        ALREADY,
+        STILL_VISIBLE,
+    }
+
     fun freezeList(context: Context, list: Array<String>): Int {
         if (!AntiSpyManager.isWorkProfile(context)) {
             Log.w(TAG, "freezeList called outside work profile")
             return 0
         }
-        var normalized = Utility.normalizeStringList(list)
+        val normalized = Utility.normalizeStringList(list)
         if (normalized.isEmpty()) {
             Log.w(TAG, "freezeList: empty list")
             return 0
@@ -31,33 +38,23 @@ object WorkProfileBatchFreeze {
         var newlyFrozen = 0
         var alreadyHidden = 0
         var reconciled = 0
+        var stillVisible = 0
         for (pkg in normalized) {
             if (pkg.isEmpty()) {
                 continue
             }
             try {
-                if (dpm.isApplicationHidden(admin, pkg)) {
-                    // DPM may report hidden=true while PackageManager still shows the app visible
-                    // and running. This desync happens when setApplicationHidden(true) was applied
-                    // to a foreground app: the policy was recorded but the hide never landed, and
-                    // every later freeze would skip the app forever. Reconcile by forcing a
-                    // false -> true toggle so the hide actually takes effect.
-                    if (!isResolvable(context, pkg)) {
-                        alreadyHidden++
-                        continue
-                    }
-                    Log.w(TAG, "desync: $pkg hidden in DPM but visible in PM, re-applying")
-                    dpm.setApplicationHidden(admin, pkg, false)
-                    if (dpm.setApplicationHidden(admin, pkg, true)) {
-                        reconciled++
-                    }
-                    continue
-                }
-                if (dpm.setApplicationHidden(admin, pkg, true)) {
-                    newlyFrozen++
+                when (freezePackage(dpm, admin, context, pkg)) {
+                    FreezeOutcome.NEWLY -> newlyFrozen++
+                    FreezeOutcome.RECONCILED -> reconciled++
+                    FreezeOutcome.ALREADY -> alreadyHidden++
+                    FreezeOutcome.STILL_VISIBLE -> stillVisible++
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "failed to freeze $pkg", e)
+                if (isResolvable(context, pkg)) {
+                    stillVisible++
+                }
             }
         }
         try {
@@ -66,9 +63,63 @@ object WorkProfileBatchFreeze {
         }
         Log.i(
             TAG,
-            "newly frozen $newlyFrozen, reconciled $reconciled, already hidden $alreadyHidden, of ${normalized.size} packages"
+            "newly frozen $newlyFrozen, reconciled $reconciled, already hidden $alreadyHidden, " +
+                "still visible $stillVisible, of ${normalized.size} packages"
         )
         return newlyFrozen + reconciled
+    }
+
+    /** Packages in [list] that PackageManager can still resolve (not actually hidden). */
+    fun countStillVisible(context: Context, list: Array<String>): Int {
+        if (!AntiSpyManager.isWorkProfile(context)) {
+            return 0
+        }
+        return Utility.normalizeStringList(list).count { pkg ->
+            pkg.isNotEmpty() && isResolvable(context, pkg)
+        }
+    }
+
+    private fun freezePackage(
+        dpm: DevicePolicyManager,
+        admin: ComponentName,
+        context: Context,
+        pkg: String,
+    ): FreezeOutcome {
+        if (!isResolvable(context, pkg)) {
+            return FreezeOutcome.ALREADY
+        }
+        if (dpm.isApplicationHidden(admin, pkg)) {
+            Log.w(TAG, "desync: $pkg hidden in DPM but visible in PM, re-applying")
+            return if (reconcileHide(dpm, admin, context, pkg)) {
+                FreezeOutcome.RECONCILED
+            } else {
+                FreezeOutcome.STILL_VISIBLE
+            }
+        }
+        if (dpm.setApplicationHidden(admin, pkg, true) && !isResolvable(context, pkg)) {
+            return FreezeOutcome.NEWLY
+        }
+        Log.w(TAG, "hide failed or incomplete for foreground $pkg, toggling hidden")
+        return if (reconcileHide(dpm, admin, context, pkg)) {
+            FreezeOutcome.RECONCILED
+        } else {
+            FreezeOutcome.STILL_VISIBLE
+        }
+    }
+
+    private fun reconcileHide(
+        dpm: DevicePolicyManager,
+        admin: ComponentName,
+        context: Context,
+        pkg: String,
+    ): Boolean {
+        dpm.setApplicationHidden(admin, pkg, false)
+        val ok = dpm.setApplicationHidden(admin, pkg, true)
+        if (!ok || isResolvable(context, pkg)) {
+            Log.w(TAG, "reconcile incomplete for $pkg (dpm=$ok, pm visible=${isResolvable(context, pkg)})")
+            return false
+        }
+        return true
     }
 
     /**

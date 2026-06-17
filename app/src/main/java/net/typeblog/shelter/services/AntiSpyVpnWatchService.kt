@@ -44,6 +44,7 @@ class AntiSpyVpnWatchService : Service() {
     private var connectivityReceiver: BroadcastReceiver? = null
     private var vpnFreezeInFlight = false
     private var vpnFreezeDoneForSession = false
+    private var vpnSessionHadFreeze = false
 
     override fun onCreate() {
         super.onCreate()
@@ -189,6 +190,7 @@ class AntiSpyVpnWatchService : Service() {
         handler.removeCallbacks(freezeRunnable)
         if (!vpnActive) {
             vpnFreezeDoneForSession = false
+            vpnSessionHadFreeze = false
             AntiSpyVpnPromptManager.onVpnSessionEnded()
             if (isMainProfileWatcher()) {
                 postVpnStateAlert(R.string.anti_spy_vpn_alert_disconnected_text)
@@ -240,15 +242,24 @@ class AntiSpyVpnWatchService : Service() {
         }
         if (vpnFreezeInFlight) return
         vpnFreezeInFlight = true
-        // Mark the session as handled so the poll loop stops re-attempting until VPN drops.
-        vpnFreezeDoneForSession = true
         try {
             val frozen = WorkProfileBatchFreeze.freezeList(this, list)
-            Log.i(TAG, "VPN batch-freeze in work profile: $frozen of ${list.size}")
+            val stillVisible = WorkProfileBatchFreeze.countStillVisible(this, list)
             if (frozen > 0) {
+                vpnSessionHadFreeze = true
+            }
+            // Keep retrying on poll while any auto-freeze app (e.g. foreground VPN client) stays visible.
+            vpnFreezeDoneForSession = stillVisible == 0
+            Log.i(
+                TAG,
+                "VPN batch-freeze in work profile: $frozen of ${list.size}, still visible=$stillVisible"
+            )
+            if (stillVisible > 0) {
+                postFreezeDiagnostic("WORK: не заморожено $stillVisible — повтор…")
+            } else {
                 postFreezeDiagnostic("WORK: заморожено $frozen из ${list.size}")
-                // showToastOnMainProfile also triggers an app-list refresh on the personal profile.
-                Utility.showToastOnMainProfile(this, R.string.freeze_all_success)
+                Utility.notifyBatchFreezeComplete(this, vpnSessionHadFreeze)
+                vpnSessionHadFreeze = false
             }
         } finally {
             handler.postDelayed({ vpnFreezeInFlight = false }, 1500L)

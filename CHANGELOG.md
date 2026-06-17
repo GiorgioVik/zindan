@@ -1,3 +1,13 @@
+1.5.3 (211)
+===
+
+**APK:** `Zindan-1.5.3-(211)-debug.apk`
+
+- Flat freeze/unfreeze toolbar and shortcut icons (no drop shadow; regenerated from sketch sources via `tools/generate_freeze_icons.ps1`).
+- User guide rewritten for 1.5.3: always-on Anti Spy, automatic VPN batch freeze, current UI strings.
+- Work profile list refresh after VPN batch freeze (`notifyBatchFreezeComplete` with follow-up delays).
+- VPN batch freeze: reconcile DPM/PM desync on first hide failure; poll retries until all auto-freeze apps are hidden.
+
 1.5.3 (208)
 ===
 

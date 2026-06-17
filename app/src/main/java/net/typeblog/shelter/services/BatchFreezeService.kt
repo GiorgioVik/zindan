@@ -37,12 +37,10 @@ class BatchFreezeService : Service() {
         list = Utility.normalizeStringList(list)
         Log.i(TAG, "freeze requested pid=${Process.myPid()} list size=${list.size}")
         val newlyFrozen = WorkProfileBatchFreeze.freezeList(this, list)
-        if (newlyFrozen > 0) {
-            Log.i(TAG, "frozen $newlyFrozen apps for VPN-up")
-            // showToastOnMainProfile also triggers an app-list refresh on the personal profile.
-            Utility.showToastOnMainProfile(this, R.string.freeze_all_success)
-        } else {
-            Log.i(TAG, "VPN-up freeze: nothing newly frozen")
+        val stillVisible = WorkProfileBatchFreeze.countStillVisible(this, list)
+        Log.i(TAG, "VPN-up freeze: newly=$newlyFrozen stillVisible=$stillVisible")
+        if (stillVisible == 0) {
+            Utility.notifyBatchFreezeComplete(this, newlyFrozen > 0)
         }
         stopSelf()
         return START_NOT_STICKY

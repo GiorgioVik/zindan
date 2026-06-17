@@ -55,6 +55,7 @@ import java.io.OutputStream
 object Utility {
     private const val TAG = "Utility"
     private const val APP_LIST_REFRESH_DELAY_MS = 700L
+    private val APP_LIST_REFRESH_FOLLOWUP_DELAYS_MS = longArrayOf(700L, 2000L, 4500L)
 
     /** [LocalStorageManager.getStringList] yields `[""]` for an empty list. */
     fun normalizeStringList(list: Array<String>?): Array<String> {
@@ -211,12 +212,31 @@ object Utility {
     }
 
     /** Refresh app lists after a cross-profile freeze/unfreeze DummyActivity finishes. */
-    fun scheduleAppListRefresh(context: Context) {
+    fun scheduleAppListRefresh(
+        context: Context,
+        delaysMs: LongArray = longArrayOf(APP_LIST_REFRESH_DELAY_MS),
+    ) {
         val appContext = context.applicationContext
-        Handler(Looper.getMainLooper()).postDelayed({
-            LocalBroadcastManager.getInstance(appContext)
-                .sendBroadcast(Intent("net.typeblog.shelter.broadcast.REFRESH"))
-        }, APP_LIST_REFRESH_DELAY_MS)
+        val handler = Handler(Looper.getMainLooper())
+        for (delay in delaysMs) {
+            handler.postDelayed({
+                LocalBroadcastManager.getInstance(appContext)
+                    .sendBroadcast(Intent("net.typeblog.shelter.broadcast.REFRESH"))
+            }, delay)
+        }
+    }
+
+    /**
+     * After a background VPN batch-freeze in the work profile: refresh the personal-profile
+     * app list (with follow-up delays for slow PackageManager updates on some devices) and
+     * optionally show the success toast on the main profile.
+     */
+    fun notifyBatchFreezeComplete(context: Context, showSuccessToast: Boolean) {
+        scheduleAppListRefreshOnMainProfile(context)
+        scheduleAppListRefresh(context, APP_LIST_REFRESH_FOLLOWUP_DELAYS_MS)
+        if (showSuccessToast) {
+            showToastOnMainProfile(context, R.string.freeze_all_success)
+        }
     }
 
     /** Refresh main-profile app lists after a freeze/unfreeze in the work profile. */
