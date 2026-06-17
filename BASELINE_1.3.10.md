@@ -12,9 +12,8 @@
 
 ```powershell
 $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
-$env:GRADLE_USER_HOME = "D:\Zindan3\.gradle-local"
-cd D:\Zindan3
-.\gradlew.bat assembleDebug
+# Optional: $env:GRADLE_USER_HOME = ".gradle-user-home"
+.\gradlew.bat :app:assembleDebug
 ```
 
 APK: `app\build\outputs\apk\debug\app-debug.apk` (копия: `Zindan-1.3.10-debug.apk`).
@@ -60,10 +59,7 @@ APK: `app\build\outputs\apk\debug\app-debug.apk` (копия: `Zindan-1.3.10-deb
 ## Откат в git
 
 ```powershell
-cd D:\Zindan3
 git checkout v1.3.10-baseline
-# или
-git reset --hard v1.3.10-baseline
 ```
 
 `git reset --hard` уничтожит незакоммиченные изменения — используйте осознанно.

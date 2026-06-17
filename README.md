@@ -1,56 +1,101 @@
-Zindan
-===
+# Zindan
 
-Zindan is a fork of [Shelter](https://cgit.typeblog.net/Shelter/about/) — a Free and Open-Source (FOSS) app that leverages the "Work Profile" feature of Android to provide an isolated space that you can install or clone apps into.
+Zindan is a fork of [Shelter](https://cgit.typeblog.net/Shelter/about/) — a Free and Open-Source (FOSS) Android app that uses the **Work Profile** feature to run apps in an isolated space. You can clone apps into the work profile, freeze them when not in use, and batch-freeze the auto-freeze list from the toolbar or launcher shortcuts.
 
-This project (`D:\Zindan3`) is rebuilt from upstream Shelter at `D:\Zindan\shelter_orig\shelter` with Zindan branding only (stage 0). Application logic matches upstream Shelter; no Samsung patches or SUSPENDED changes yet.
+**Current release:** **1.5.3** (versionCode **208**) — see [BASELINE_1.5.3.md](BASELINE_1.5.3.md).
 
-Base: upstream Shelter  
-Reference fork: `D:\Zindan2` (historical changes only)
+Shelter remains the upstream base; Zindan adds branding, Russian UX polish, Anti Spy VPN handling, top-of-screen toasts, and Samsung-focused field testing.
 
-Version: **1.3.10** (versionCode 140) — rollback baseline: tag `v1.3.10-baseline`, see [BASELINE_1.3.10.md](BASELINE_1.3.10.md)
+## Features
 
-Features
-===
+- Install or clone apps into an isolated work profile
+- Freeze / unfreeze individual apps
+- **Auto-freeze** list — apps frozen together on screen lock, batch freeze, Anti Spy VPN events, and shortcuts
+- **Batch freeze / unfreeze** from the toolbar, settings, or home-screen shortcuts
+- Frozen apps sorted to the top of the work profile list
+- Anti Spy: detect third-party VPN, prompt for batch freeze, dummy-VPN displacement on app launch
 
-- Installing apps inside a work profile for isolation
-- "Freeze" apps inside the work profile to prevent them from running or being woken up when you are not actively using them
-- Installing two copies of the same app on the same device
+User guide (Russian): [USER_GUIDE.md](USER_GUIDE.md) · [PDF](USER_GUIDE.pdf)
 
-User guide (Russian): [USER_GUIDE.md](USER_GUIDE.md) · [PDF](USER_GUIDE.pdf).
+Known issues and test notes: [PROBLEMS.md](PROBLEMS.md)
 
-Known open issues: see [PROBLEMS.md](PROBLEMS.md).
+## Requirements
 
-Stage 0 checklist (baseline on Samsung devices)
-===
+- Android 7.0+ (API 24+)
+- A device with a working Work Profile implementation (AOSP-like ROMs work best; heavily vendor-modified firmware may break profile features)
 
-- [x] Branding, setup wizard, locales
-- [x] App action menu (tablet touch offset fixed)
-- [x] Clone Play Store and user apps → work profile
-- [x] Work app list loads without reboot
-- [x] Manual freeze / unfreeze
-- [x] Auto-freeze (like upstream Shelter)
-- [x] Batch freeze / unfreeze (toolbar, settings, shortcuts)
-- [x] Frozen apps listed at top of work profile
-- [ ] Clone Galaxy Store → work profile — **deferred**, same as upstream Shelter ([PROBLEMS.md](PROBLEMS.md))
-
-Test devices:
+Tested on:
 
 - Samsung Galaxy S24 Ultra (SM-S928B/DS)
 - Samsung Galaxy Tab S9 FE+ (SM-X616B)
 
-Building
-===
+## Clone and build
 
-```bash
-cd D:\Zindan3
-git submodule update --init --recursive
-.\gradlew.bat assembleDebug
+The repository lives on disk at **`D:\Zindan5`** for local development. GitHub is used as the remote only — you do not need to move the project off `D:`.
+
+```powershell
+git clone --recurse-submodules https://github.com/GiorgioVik/zindan.git D:\Zindan5
+cd D:\Zindan5
 ```
 
-Uninstalling
-===
+If you already cloned without submodules:
 
-To uninstall Zindan, delete the work profile first in Settings → Accounts, then uninstall the app normally.
+```powershell
+git submodule update --init --recursive
+```
 
-Upstream Shelter documentation still applies for most behavior. See the original Shelter README for F-Droid downloads and upstream support channels.
+Build a debug APK (Android Studio JBR or JDK 17+):
+
+```powershell
+$env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
+.\gradlew.bat :app:assembleDebug
+```
+
+The APK is written to `app/build/outputs/apk/debug/` and copied to the repo root as `Zindan-{version}-({code})-debug.apk`.  
+`version.properties` is auto-incremented on each `assemble*` task — see [BASELINE_1.5.3.md](BASELINE_1.5.3.md) to reproduce an exact build number.
+
+### Launcher icons (optional)
+
+To regenerate mipmaps from a source PNG:
+
+1. Place `assets/zindan_icon_source.png` in the repo (or set `$env:ZINDAN_ICON_SOURCE`).
+2. Run `tools\generate_zindan_launcher_icons.ps1`.
+
+## Publish to GitHub (maintainers)
+
+First-time setup while keeping the working tree on `D:\Zindan5`:
+
+1. Create an empty repository on GitHub (e.g. `GiorgioVik/zindan`).
+2. Point `origin` at GitHub (already configured in this checkout):
+
+   ```powershell
+   cd D:\Zindan5
+   git remote set-url origin https://github.com/GiorgioVik/zindan.git
+   ```
+
+3. Commit and push:
+
+   ```powershell
+   git push -u origin v1.5.2
+   git push origin --tags
+   ```
+
+Optional local backup remote (same machine, different folder):
+
+```powershell
+git remote add backup D:\Zindan4
+git push backup v1.5.2
+```
+
+## Uninstalling
+
+Delete the work profile first in **Settings → Accounts**, then uninstall Zindan normally. Removing only the launcher icon does not remove the work profile or cloned apps.
+
+## License
+
+GPL-3.0-or-later — see [LICENSE](LICENSE). Zindan is derived from Shelter; respect upstream licensing when redistributing.
+
+## Upstream
+
+- [Shelter](https://cgit.typeblog.net/Shelter/about/) by PeterCxy
+- [SetupWizardLibrary](https://gitea.angry.im/PeterCxy/SetupWizardLibrary) (git submodule)

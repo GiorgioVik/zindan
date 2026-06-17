@@ -1,7 +1,12 @@
 Add-Type -AssemblyName System.Drawing
 
-$SourcePath = "D:\Zindan\zindan_icon_source.png"
-$ResRoot = "D:\Zindan5\app\src\main\res"
+$RepoRoot = Split-Path $PSScriptRoot -Parent
+$ResRoot = Join-Path $RepoRoot "app\src\main\res"
+$SourcePath = if ($env:ZINDAN_ICON_SOURCE) {
+    $env:ZINDAN_ICON_SOURCE
+} else {
+    Join-Path $RepoRoot "assets\zindan_icon_source.png"
+}
 # Dark red shield background (#75081B), sampled from original Zindan launcher art.
 $BgColor = [System.Drawing.Color]::FromArgb(255, 117, 8, 27)
 

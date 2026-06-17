@@ -1,9 +1,8 @@
 # Точка отката — Zindan 1.5.2 (versionCode 177)
 
 **Дата фиксации:** 2026-06-13  
-**Git-тег:** `v1.5.2-baseline`  
-**Путь:** `D:\Zindan5`  
-**База:** git-тег `v1.5.0-baseline` (Zindan 1.5.0, сборка 153)  
+**Git tag:** `v1.5.2-baseline`  
+**Base:** git tag `v1.5.0-baseline` (Zindan 1.5.0, build 153)  
 **APK:** `Zindan-1.5.2-(177)-debug.apk`
 
 Используйте этот коммит/тег, если дальнейшие эксперименты ухудшат поведение и нужно вернуться к текущему состоянию 1.5.2.
@@ -18,7 +17,7 @@
 | VPN | Системные уведомления «VPN включен» / «VPN выключен» (основной профиль) |
 | Групповая заморозка | Heads-up при успешной заморозке; «Заморозить всё» учитывает уже замороженные приложения |
 | Иконка приложения | `ic_launcher_zindan`, тёмно-красный фон `#75081B` (как в 153 — отдельный PNG-слой фона) |
-| «О программе» | Исходный код: `D:\Zindan5` |
+| «О программе» | Ссылка на GitHub-репозиторий |
 | Anti Spy служба | Текст: «Контроль VPN» |
 
 Логика ярлыка «Разморозить и запустить» и вытеснения VPN при запуске — **без изменений** относительно 153.
@@ -29,8 +28,8 @@
 
 ```powershell
 $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
-$env:GRADLE_USER_HOME = "D:\Zindan5\.gradle-user-home"
-cd D:\Zindan5
+# Optional local Gradle cache (example on D:):
+# $env:GRADLE_USER_HOME = "D:\Zindan5\.gradle-user-home"
 .\gradlew.bat :app:assembleDebug
 ```
 
@@ -43,14 +42,13 @@ APK копируется в корень: `Zindan-{VERSION_NAME}-({VERSION_CODE}
 
 ## Подпись
 
-Debug-сборка подписывается стандартным `~/.android/debug.keystore` — тот же ключ, что и в `D:\Zindan4`, обновление поверх установленной версии возможно.
+Debug builds use the standard Android debug keystore (`~/.android/debug.keystore`).
 
 ---
 
 ## Откат
 
 ```powershell
-cd D:\Zindan5
 git checkout v1.5.2-baseline
 ```
 

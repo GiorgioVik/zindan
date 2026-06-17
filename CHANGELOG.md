@@ -1,3 +1,16 @@
+1.5.3 (208)
+===
+
+**Baseline tag (recommended):** `v1.5.3-baseline` · commit `784a616`  
+**APK:** `Zindan-1.5.3-(208)-debug.apk`
+
+- VPN auto-freeze: reconcile DPM vs PackageManager `hidden` desync — foreground apps no longer skip batch freeze permanently (fixes VPN Inspector and similar cases).
+- Work profile list sorted by frozen state, then auto-freeze membership, then A–Z.
+- Auto-freeze on VPN connect (without displacing the VPN tunnel).
+- Cross-profile delivery fixes for work-profile list refresh after batch operations.
+
+See [BASELINE_1.5.3.md](BASELINE_1.5.3.md) and [PROBLEMS.md](PROBLEMS.md) (build 208 field test).
+
 1.3.10 (140)
 ===
 
@@ -22,7 +35,7 @@
 
 - Batch freeze and batch unfreeze (toolbar, settings, launcher shortcuts).
 - Frozen apps sorted at the top of the work profile list.
-- Toolbar freeze/unfreeze icons from Zindan2 (snowflake / ice).
+- Toolbar freeze/unfreeze icons (snowflake / ice motif).
 
 1.3.2 (132)
 ===
@@ -39,10 +52,9 @@
 1.3.0 (130)
 ===
 
-- Fork from upstream Shelter (`shelter_orig`) with Zindan branding only.
-- Zindan name, launcher icons, and green/yellow theme from Zindan2 assets.
-- Fixed version 1.3.0; no changes to installApp, auto-freeze, or refresh logic.
-- No Samsung SUSPENDED patches in this release (baseline stage).
+- Fork from upstream Shelter with Zindan branding.
+- Zindan name, launcher icons, and green/yellow theme.
+- Fixed version 1.3.0; baseline stage on Samsung devices.
 
 1.9.1 (445)
 ===

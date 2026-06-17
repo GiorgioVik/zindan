@@ -84,3 +84,12 @@ fastlane/readme.md
 # temporary google play repackaging tool
 repackage/*
 !repackage/repackage.sh
+
+# Local build artifacts copied to repo root by assembleDebug
+/Zindan-*.apk
+
+# Gradle user home when redirected into the repo (optional local setup)
+.gradle-user-home/
+
+# Editor / shell junk
+=ro

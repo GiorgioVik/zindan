@@ -107,7 +107,7 @@
     <string name="settings_about">About</string>
     <string name="settings_version">Version</string>
     <string name="settings_source_code">Source Code</string>
-    <string name="settings_source_code_url" translatable="false">D:\Zindan5</string>
+    <string name="settings_source_code_url" translatable="false">https://github.com/GiorgioVik/zindan</string>
 
     <!-- Toast Long Texts -->
     <string name="provision_finished">Zindan setup complete. Now restarting Zindan. If Zindan didn\'t start automatically, you may launch it again from your launcher.</string>

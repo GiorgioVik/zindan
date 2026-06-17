@@ -12,8 +12,6 @@
 
 ```powershell
 $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
-$env:GRADLE_USER_HOME = "D:\zindan4\.gradle-user-home"
-cd D:\zindan4
 .\gradlew.bat :app:assembleDebug
 ```
 
