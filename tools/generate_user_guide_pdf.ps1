@@ -58,6 +58,14 @@ function Convert-MarkdownToHtml([string[]]$lines) {
             continue
         }
 
+        if ($line -match '^### (.+)$') {
+            if ($inUl) { [void]$sb.AppendLine("</ul>"); $inUl = $false }
+            if ($inOl) { [void]$sb.AppendLine("</ol>"); $inOl = $false }
+            if ($inTable) { [void]$sb.AppendLine("</table>"); $inTable = $false; $tableHeaderDone = $false }
+            [void]$sb.AppendLine("<h3>$(Format-Inline $Matches[1])</h3>")
+            continue
+        }
+
         if ($line -match '^> (.+)$') {
             [void]$sb.AppendLine("<blockquote>$(Format-Inline $Matches[1])</blockquote>")
             continue
@@ -114,18 +122,26 @@ $outputPdfPath = [System.IO.Path]::GetFullPath($OutputPdf)
 $htmlPath = [System.IO.Path]::ChangeExtension($outputPdfPath, ".html")
 $lines = Get-Content -LiteralPath $inputPath -Encoding UTF8
 $body = Convert-MarkdownToHtml $lines
+$pageTitle = "Zindan"
+foreach ($l in $lines) {
+    if ($l -match '^# (.+)$') {
+        $pageTitle = $Matches[1]
+        break
+    }
+}
 
 $html = @"
 <!DOCTYPE html>
 <html lang="ru">
 <head>
 <meta charset="utf-8"/>
-<title>Zindan — инструкция для пользователя</title>
+<title>$pageTitle</title>
 <style>
   @page { margin: 18mm 16mm; }
   body { font-family: "Segoe UI", Arial, sans-serif; font-size: 11pt; line-height: 1.45; color: #1a1a1a; }
   h1 { font-size: 22pt; color: #2d5016; border-bottom: 2px solid #c9a227; padding-bottom: 6px; }
   h2 { font-size: 14pt; color: #2d5016; margin-top: 1.2em; }
+  h3 { font-size: 12pt; color: #2d5016; margin-top: 1em; }
   p, li { margin: 0.35em 0; }
   ul, ol { margin: 0.4em 0 0.8em 1.2em; }
   blockquote { margin: 0.8em 0; padding: 0.6em 1em; border-left: 4px solid #c9a227; background: #f8f6ee; }
