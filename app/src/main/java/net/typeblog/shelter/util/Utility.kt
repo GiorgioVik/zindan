@@ -36,8 +36,10 @@ import android.provider.MediaStore
 import android.provider.Settings
 import android.util.Log
 import androidx.activity.result.contract.ActivityResultContract
+import androidx.annotation.DrawableRes
 import androidx.annotation.NonNull
 import androidx.annotation.Nullable
+import androidx.core.content.ContextCompat
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import net.typeblog.shelter.R
 import net.typeblog.shelter.receivers.ShelterDeviceAdminReceiver
@@ -567,6 +569,33 @@ object Utility {
         drawable.draw(canvas)
 
         return if (maxSizePx > 0) scaleBitmapToMax(bitmap, maxSizePx) else bitmap
+    }
+
+    /**
+     * Pinned shortcut icon: opaque green PNG at shortcut scale (see generate_freeze_icons.ps1).
+     * Flatten any stray alpha to green — Samsung shows transparency as white.
+     */
+    fun createBatchShortcutIcon(context: Context, @DrawableRes shortcutRes: Int): Icon {
+        val app = context.applicationContext
+        val decoded = BitmapFactory.decodeResource(app.resources, shortcutRes)
+            ?: return Icon.createWithResource(app, shortcutRes)
+        val opaque = flattenShortcutBitmap(decoded)
+        if (opaque !== decoded) {
+            decoded.recycle()
+        }
+        return Icon.createWithBitmap(scaleBitmapToMax(opaque, 512))
+    }
+
+    private const val SHORTCUT_ICON_GREEN = 0xFF223D2C.toInt()
+
+    private fun flattenShortcutBitmap(source: Bitmap): Bitmap {
+        val width = source.width
+        val height = source.height
+        val flat = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(flat)
+        canvas.drawColor(SHORTCUT_ICON_GREEN)
+        canvas.drawBitmap(source, 0f, 0f, null)
+        return flat
     }
 
     private fun scaleBitmapToMax(source: Bitmap, maxSizePx: Int): Bitmap {

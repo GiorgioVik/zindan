@@ -19,6 +19,10 @@ $BgG = 61
 $BgB = 44
 $BgTolerance = 28
 
+# Toolbar (in-app): full canvas. Shortcut PNG (legacy): 60% centered on green.
+$ToolbarDrawScale = 1.0
+$ShortcutDrawScale = 0.75
+
 function Save-Png {
     param(
         [System.Drawing.Bitmap]$Bitmap,
@@ -71,7 +75,7 @@ function New-ToolbarIcon {
     param(
         [System.Drawing.Bitmap]$Foreground,
         [int]$Size,
-        [double]$Scale = 0.86
+        [double]$Scale = $ToolbarDrawScale
     )
     $canvas = New-Object System.Drawing.Bitmap $Size, $Size, ([System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
     $g = [System.Drawing.Graphics]::FromImage($canvas)
@@ -83,6 +87,29 @@ function New-ToolbarIcon {
 
     $target = [int][Math]::Round($Size * $Scale)
     $offset = [int][Math]::Round(($Size - $target) / 2.0)
+    $g.DrawImage($Foreground, $offset, $offset, $target, $target)
+    $g.Dispose()
+    return $canvas
+}
+
+function New-ShortcutIcon {
+    param(
+        [System.Drawing.Bitmap]$Foreground,
+        [int]$Size,
+        [double]$Scale = $ShortcutDrawScale
+    )
+    $canvas = New-Object System.Drawing.Bitmap $Size, $Size, ([System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
+    $g = [System.Drawing.Graphics]::FromImage($canvas)
+    $g.CompositingMode = [System.Drawing.Drawing2D.CompositingMode]::SourceCopy
+    $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+    $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::HighQuality
+    $g.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
+    $g.Clear([System.Drawing.Color]::FromArgb(255, $BgR, $BgG, $BgB))
+
+    $target = [int][Math]::Round($Size * $Scale)
+    $offset = [int][Math]::Round(($Size - $target) / 2.0)
+    # SourceOver: transparent pixels in the foreground must not punch holes in the green fill.
+    $g.CompositingMode = [System.Drawing.Drawing2D.CompositingMode]::SourceOver
     $g.DrawImage($Foreground, $offset, $offset, $target, $target)
     $g.Dispose()
     return $canvas
@@ -103,11 +130,13 @@ function Write-IconSet {
     }
     foreach ($folder in $densityMap.Keys) {
         $size = $densityMap[$folder]
-        $icon = New-ToolbarIcon -Foreground $Foreground -Size $size
         $base = Join-Path $ResRoot $folder
-        Save-Png -Bitmap $icon -Path (Join-Path $base "$ToolbarName.png")
-        Save-Png -Bitmap $icon -Path (Join-Path $base "$ShortcutName.png")
-        $icon.Dispose()
+        $toolbarIcon = New-ToolbarIcon -Foreground $Foreground -Size $size -Scale $ToolbarDrawScale
+        Save-Png -Bitmap $toolbarIcon -Path (Join-Path $base "$ToolbarName.png")
+        $toolbarIcon.Dispose()
+        $shortcutIcon = New-ShortcutIcon -Foreground $Foreground -Size $size -Scale $ShortcutDrawScale
+        Save-Png -Bitmap $shortcutIcon -Path (Join-Path $base "$ShortcutName.png")
+        $shortcutIcon.Dispose()
     }
 }
 
@@ -130,4 +159,4 @@ $unfreezeFg.Dispose()
 $freezeSrc.Dispose()
 $unfreezeSrc.Dispose()
 
-Write-Host "Freeze/unfreeze toolbar + shortcut icons generated in $ResRoot"
+Write-Host "Freeze/unfreeze icons generated (toolbar=$ToolbarDrawScale shortcut=$ShortcutDrawScale)"

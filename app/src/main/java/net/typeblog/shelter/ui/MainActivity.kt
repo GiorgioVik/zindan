@@ -613,7 +613,7 @@ class MainActivity : AppCompatActivity() {
                 val launchIntent = batchShortcutIntent(DummyActivity.PUBLIC_FREEZE_ALL)
                 Utility.createLauncherShortcut(
                     this, launchIntent,
-                    Icon.createWithResource(this, R.drawable.ic_shortcut_freeze),
+                    Utility.createBatchShortcutIcon(this, R.drawable.ic_shortcut_freeze),
                     "shelter-freeze-all", getString(R.string.freeze_all_shortcut)
                 )
                 true
@@ -622,7 +622,7 @@ class MainActivity : AppCompatActivity() {
                 val launchIntent = batchShortcutIntent(DummyActivity.PUBLIC_UNFREEZE_ALL)
                 Utility.createLauncherShortcut(
                     this, launchIntent,
-                    Icon.createWithResource(this, R.drawable.ic_shortcut_unfreeze),
+                    Utility.createBatchShortcutIcon(this, R.drawable.ic_shortcut_unfreeze),
                     "shelter-unfreeze-all", getString(R.string.unfreeze_all_shortcut)
                 )
                 true
