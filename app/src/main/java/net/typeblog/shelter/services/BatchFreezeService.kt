@@ -40,7 +40,7 @@ class BatchFreezeService : Service() {
         val stillVisible = WorkProfileBatchFreeze.countStillVisible(this, list)
         Log.i(TAG, "VPN-up freeze: newly=$newlyFrozen stillVisible=$stillVisible")
         if (stillVisible == 0) {
-            Utility.notifyBatchFreezeComplete(this, newlyFrozen > 0)
+            Utility.notifyVpnBatchFreezeSessionComplete(this, newlyFrozen > 0)
         }
         stopSelf()
         return START_NOT_STICKY

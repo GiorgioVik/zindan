@@ -17,7 +17,15 @@ class AntiSpyVpnFreezeReceiver : BroadcastReceiver() {
         if (intent.action != ACTION) {
             return
         }
-        val app = context.applicationContext
+        val pendingResult = goAsync()
+        try {
+            handleVpnBatchFreeze(context.applicationContext)
+        } finally {
+            pendingResult.finish()
+        }
+    }
+
+    private fun handleVpnBatchFreeze(app: Context) {
         LocalStorageManager.initialize(app)
         if (AntiSpyManager.isWorkProfile(app)) {
             return
@@ -25,16 +33,20 @@ class AntiSpyVpnFreezeReceiver : BroadcastReceiver() {
         val list = Utility.normalizeStringList(AntiSpyManager.getAutoFreezeList(app))
         if (list.isEmpty()) {
             Log.w(TAG, "VPN batch freeze: auto-freeze list is empty")
-            Utility.postUserAlert(app, DIAG_NOTIFICATION_ID, "Zindan VPN-диагностика", "RECEIVER: список основного профиля пуст")
+            Utility.postUserAlert(
+                app,
+                DIAG_NOTIFICATION_ID,
+                "Zindan VPN-диагностика",
+                "RECEIVER: список основного профиля пуст",
+            )
             return
         }
         Log.i(TAG, "VPN batch freeze requested, list=${list.size}")
-        // Keep work-profile list in sync before triggering background freeze.
-        AntiSpyManager.syncAutoFreezeListToWorkProfile(app)
+        // FREEZE_ALL_IN_LIST persists the authoritative main list in work prefs and freezes via DPM.
+        Utility.scheduleFreezeInWorkProfile(app, list)
         val started = Utility.startBatchFreezeInWorkProfile(app, list)
         if (!started) {
-            Log.w(TAG, "startBatchFreezeInWorkProfile failed, AlarmManager fallback")
-            Utility.scheduleFreezeInWorkProfile(app, list)
+            Log.w(TAG, "startBatchFreezeInWorkProfile failed (AlarmManager activity already scheduled)")
         }
         Utility.postUserAlert(
             app,

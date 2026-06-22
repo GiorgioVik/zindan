@@ -38,11 +38,17 @@ class LocalStorageManager private constructor(context: Context) {
     }
 
     fun getStringList(pref: String): Array<String> =
-        prefs.getString(pref, "")!!.split(LIST_DIVIDER).toTypedArray()
+        prefs.getString(pref, "")!!
+            .split(LIST_DIVIDER)
+            .filter { it.isNotEmpty() }
+            .toTypedArray()
 
     /** Re-read from disk (needed for the {@code :vpnwatch} process). */
     fun getStringListFresh(pref: String): Array<String> =
-        prefs().getString(pref, "")!!.split(LIST_DIVIDER).toTypedArray()
+        prefs().getString(pref, "")!!
+            .split(LIST_DIVIDER)
+            .filter { it.isNotEmpty() }
+            .toTypedArray()
 
     fun getBooleanFresh(pref: String, defaultValue: Boolean): Boolean =
         prefs().getBoolean(pref, defaultValue)
@@ -85,6 +91,12 @@ class LocalStorageManager private constructor(context: Context) {
         const val PREF_ANTI_SPY_LAUNCH_VERSION_CODE = "anti_spy_launch_version_code"
         const val PREF_UNFREEZE_SHORTCUT_REGISTRY = "unfreeze_shortcut_registry"
         const val PREF_LEGACY_FROZEN_MIGRATION_DONE = "legacy_frozen_migration_done"
+        /** Last seen work-profile package set; used to detect store installs between sessions. */
+        const val PREF_KNOWN_WORK_PROFILE_PACKAGES = "known_work_profile_packages"
+        /** User removed auto-freeze; do not re-assign until they enable it in the menu. */
+        const val PREF_AUTO_FREEZE_OPT_OUT_WORK_PROFILE = "auto_freeze_opt_out_work_profile"
+        /** Store installs waiting for cross-profile write to the auto-freeze list. */
+        const val PREF_PENDING_STORE_AUTO_FREEZE = "pending_store_auto_freeze"
 
         private const val LIST_DIVIDER = ","
         private const val PREFS_NAME = "prefs"

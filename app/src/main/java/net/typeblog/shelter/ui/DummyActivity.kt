@@ -104,6 +104,7 @@ class DummyActivity : Activity() {
             PUBLIC_FREEZE_ALL -> actionPublicFreezeAll()
             PUBLIC_UNFREEZE_ALL -> actionPublicUnfreezeAll()
             SHOW_TOAST -> actionShowToast()
+            REFRESH_MAIN_APP_LIST -> actionRefreshMainAppList()
             FREEZE_ALL_IN_LIST -> actionFreezeAllInList()
             UNFREEZE_ALL_IN_LIST -> actionUnfreezeAllInList()
             ENABLE_AUTO_FREEZE_WORK_PROFILE -> actionEnableAutoFreezeWorkProfile()
@@ -541,7 +542,7 @@ class DummyActivity : Activity() {
         if (!isProfileOwner) {
             val packageName = intent.getStringExtra("packageName")
             if (packageName != null) {
-                AutoFreezeDefaults.enableForWorkProfile(this, packageName)
+                AutoFreezeDefaults.enableForWorkProfile(this, packageName, clearOptOut = true)
             }
         }
         finish()
@@ -578,9 +579,18 @@ class DummyActivity : Activity() {
         if (resId != 0) {
             ZindanToast.show(this, resId)
         }
-        // The toast is forwarded from the work profile after a background batch-freeze. Refresh
-        // the personal-profile app list too, so the frozen state shows without reopening the app.
-        Utility.scheduleAppListRefresh(this, longArrayOf(700L, 2000L, 4500L))
+        if (!isProfileOwner) {
+            Utility.deliverAppListRefreshInMainProcess(this)
+            Utility.scheduleAppListRefresh(this, longArrayOf(700L, 2000L, 4500L))
+        }
+        finishBatchShortcutFlow()
+    }
+
+    private fun actionRefreshMainAppList() {
+        if (!isProfileOwner) {
+            Utility.deliverAppListRefreshInMainProcess(this)
+            Utility.scheduleAppListRefresh(this, longArrayOf(700L, 2000L, 4500L))
+        }
         finishBatchShortcutFlow()
     }
 
@@ -694,9 +704,9 @@ class DummyActivity : Activity() {
             val frozen = WorkProfileBatchFreeze.freezeList(this, list)
             if (frozen > 0) {
                 Utility.postVpnAutoFreezeSuccessAlert(this)
-                // showToastOnMainProfile also triggers an app-list refresh on the personal profile.
                 Utility.showToastOnMainProfile(this, R.string.freeze_all_success)
             }
+            Utility.scheduleAppListRefreshDelivery(this)
             finish()
         } else {
             finish()
@@ -819,6 +829,7 @@ class DummyActivity : Activity() {
         const val PUBLIC_FREEZE_ALL = "net.typeblog.shelter.action.PUBLIC_FREEZE_ALL"
         const val PUBLIC_UNFREEZE_ALL = "net.typeblog.shelter.action.PUBLIC_UNFREEZE_ALL"
         const val SHOW_TOAST = "net.typeblog.shelter.action.SHOW_TOAST"
+        const val REFRESH_MAIN_APP_LIST = "net.typeblog.shelter.action.REFRESH_MAIN_APP_LIST"
         const val FREEZE_ALL_IN_LIST = "net.typeblog.shelter.action.FREEZE_ALL_IN_LIST"
         const val UNFREEZE_ALL_IN_LIST = "net.typeblog.shelter.action.UNFREEZE_ALL_IN_LIST"
         const val ENABLE_AUTO_FREEZE_WORK_PROFILE =
@@ -836,7 +847,9 @@ class DummyActivity : Activity() {
             FINALIZE_PROVISION,
             PUBLIC_FREEZE_ALL,
             PUBLIC_UNFREEZE_ALL,
-            PUBLIC_UNFREEZE_AND_LAUNCH
+            PUBLIC_UNFREEZE_AND_LAUNCH,
+            REFRESH_MAIN_APP_LIST,
+            SHOW_TOAST,
         )
 
         private val ACTIONS_ALLOWED_WITHOUT_SIGNATURE_SAME_PROCESS = listOf(

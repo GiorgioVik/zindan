@@ -141,6 +141,13 @@
             </intent-filter>
         </receiver>
 
+        <receiver android:name=".receivers.AppListRefreshReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="net.typeblog.shelter.action.DELIVER_APP_LIST_REFRESH" />
+            </intent-filter>
+        </receiver>
+
         <receiver android:name=".receivers.WorkProfilePackageAddedReceiver"
             android:exported="true"
             android:enabled="true">

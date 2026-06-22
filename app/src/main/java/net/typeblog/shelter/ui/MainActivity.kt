@@ -184,6 +184,7 @@ class MainActivity : AppCompatActivity() {
                 if (resId != 0) {
                     ZindanToast.show(this, resId)
                 }
+                refreshAppLists()
             }
             ACTION_REFRESH_APP_LISTS -> refreshAppLists()
         }
@@ -444,6 +445,7 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         isResumed = true
+        visibleInstance = this
         AntiSpyManager.syncVpnWatchEverywhere(this)
         if (pendingVpnBlockReason != 0) {
             val reason = pendingVpnBlockReason
@@ -461,6 +463,9 @@ class MainActivity : AppCompatActivity() {
 
     override fun onPause() {
         isResumed = false
+        if (visibleInstance === this) {
+            visibleInstance = null
+        }
         super.onPause()
     }
 
@@ -712,6 +717,19 @@ class MainActivity : AppCompatActivity() {
         @JvmField
         @Volatile
         var isResumed = false
+
+        @Volatile
+        private var visibleInstance: MainActivity? = null
+
+        /** Refresh app lists when the personal-profile UI is on screen. */
+        @JvmStatic
+        fun refreshIfVisible() {
+            val activity = visibleInstance ?: return
+            if (!isResumed) {
+                return
+            }
+            activity.runOnUiThread { activity.refreshAppLists() }
+        }
 
         const val ACTION_BATCH_FREEZE_ALL = "net.typeblog.shelter.action.BATCH_FREEZE_ALL"
         const val ACTION_BATCH_UNFREEZE_ALL = "net.typeblog.shelter.action.BATCH_UNFREEZE_ALL"

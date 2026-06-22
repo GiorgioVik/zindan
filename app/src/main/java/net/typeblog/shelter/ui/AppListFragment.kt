@@ -344,11 +344,16 @@ class AppListFragment : BaseFragment() {
             MENU_ITEM_CREATE_UNFREEZE_SHORTCUT -> loadIconAndAddUnfreezeShortcut(app, null)
             MENU_ITEM_AUTO_FREEZE -> {
                 if (!checked) {
-                    AutoFreezeDefaults.enableForWorkProfile(requireContext(), app.getPackageName())
+                    AutoFreezeDefaults.enableForWorkProfile(
+                        requireContext(),
+                        app.getPackageName(),
+                        clearOptOut = true
+                    )
                 } else {
                     LocalStorageManager.getInstance().removeFromStringList(
                         LocalStorageManager.PREF_AUTO_FREEZE_LIST_WORK_PROFILE, app.getPackageName()
                     )
+                    AutoFreezeDefaults.optOutOfAutoFreeze(app.getPackageName())
                     AntiSpyManager.syncAutoFreezeListToWorkProfile(requireContext())
                     if (app.isHidden()) {
                         try {
@@ -439,6 +444,7 @@ class AppListFragment : BaseFragment() {
                                     LocalStorageManager.PREF_AUTO_FREEZE_LIST_WORK_PROFILE,
                                     pkg
                                 )
+                                AutoFreezeDefaults.clearWorkProfilePackageTracking(pkg)
                             }
                         }
                         Utility.deleteMissingApps(
@@ -545,7 +551,11 @@ class AppListFragment : BaseFragment() {
             message = String.format(message, app.getLabel())
             ZindanToast.show(requireContext(), message)
             if (isInstall && !isRemote) {
-                AutoFreezeDefaults.enableForWorkProfile(requireContext(), app.getPackageName())
+                AutoFreezeDefaults.enableForWorkProfile(
+                    requireContext(),
+                    app.getPackageName(),
+                    clearOptOut = true
+                )
             }
             if (!isInstall && isRemote) {
                 Utility.removeUnfreezeLauncherShortcutsEverywhere(
@@ -556,6 +566,7 @@ class AppListFragment : BaseFragment() {
                     LocalStorageManager.PREF_AUTO_FREEZE_LIST_WORK_PROFILE,
                     app.getPackageName()
                 )
+                AutoFreezeDefaults.clearWorkProfilePackageTracking(app.getPackageName())
             }
             requestAppListRefresh(followUpAfterInstall = isInstall && !isRemote)
         } else if (result == ShelterService.RESULT_CANNOT_INSTALL_SYSTEM_APP) {

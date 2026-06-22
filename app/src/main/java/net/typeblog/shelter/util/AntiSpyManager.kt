@@ -23,6 +23,10 @@ object AntiSpyManager {
     // list actually changed, so a repeated onResume with an unchanged list is a no-op.
     private var lastSyncedListSignature: String? = null
 
+    fun invalidateAutoFreezeListSync() {
+        lastSyncedListSignature = null
+    }
+
     /** How to reach the work profile when freezing the auto-freeze list. */
     enum class AutoFreezeDelivery {
         /** Open [DummyActivity] cross-profile (UI, shortcuts, boot-on-open). */
@@ -33,7 +37,7 @@ object AntiSpyManager {
     }
 
     /** Push auto-freeze list + VPN watcher state into the work profile. */
-    fun syncAutoFreezeListToWorkProfile(context: Context) {
+    fun syncAutoFreezeListToWorkProfile(context: Context, force: Boolean = false) {
         if (isWorkProfile(context)) {
             return
         }
@@ -43,7 +47,7 @@ object AntiSpyManager {
         val list = getAutoFreezeList()
         val signature = list.sorted().joinToString("\u0000")
         // Already pushed this exact list — skip to avoid the resume/launch loop (see field doc).
-        if (signature == lastSyncedListSignature) {
+        if (!force && signature == lastSyncedListSignature) {
             return
         }
         try {

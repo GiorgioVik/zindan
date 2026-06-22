@@ -42,9 +42,12 @@ import androidx.annotation.Nullable
 import androidx.core.content.ContextCompat
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import net.typeblog.shelter.R
+import net.typeblog.shelter.receivers.AntiSpyVpnFreezeReceiver
+import net.typeblog.shelter.receivers.AppListRefreshReceiver
 import net.typeblog.shelter.receivers.ShelterDeviceAdminReceiver
 import net.typeblog.shelter.services.BatchFreezeService
 import net.typeblog.shelter.services.IShelterService
+import net.typeblog.shelter.ui.AppListFragment
 import net.typeblog.shelter.ui.DummyActivity
 import net.typeblog.shelter.ui.MainActivity
 import java.io.BufferedReader
@@ -58,6 +61,7 @@ object Utility {
     private const val TAG = "Utility"
     private const val APP_LIST_REFRESH_DELAY_MS = 700L
     private val APP_LIST_REFRESH_FOLLOWUP_DELAYS_MS = longArrayOf(700L, 2000L, 4500L)
+    private val APP_LIST_REFRESH_DELIVERY_DELAYS_MS = longArrayOf(50L, 700L, 2000L, 4500L)
 
     /** [LocalStorageManager.getStringList] yields `[""]` for an empty list. */
     fun normalizeStringList(list: Array<String>?): Array<String> {
@@ -206,6 +210,121 @@ object Utility {
         }
     }
 
+    /**
+     * Work profile → main profile: add a package to the auto-freeze list when
+     * [Context.startActivity] from a background receiver is blocked.
+     */
+    fun scheduleEnableAutoFreezeOnMainProfile(context: Context, packageName: String) {
+        if (packageName.isEmpty() || packageName == context.packageName) {
+            return
+        }
+        try {
+            val intent = Intent(DummyActivity.ENABLE_AUTO_FREEZE_WORK_PROFILE).apply {
+                putExtra("packageName", packageName)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            }
+            transferIntentToProfile(context, intent)
+            val requestCode = 0xE49E2 xor packageName.hashCode()
+            val pi = PendingIntent.getActivity(
+                context,
+                requestCode,
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            val am = context.getSystemService(AlarmManager::class.java)
+            if (am != null) {
+                am.set(
+                    AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                    SystemClock.elapsedRealtime() + 50,
+                    pi
+                )
+                Log.i(TAG, "scheduled enable auto-freeze on main profile for $packageName")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "scheduleEnableAutoFreezeOnMainProfile failed for $packageName", e)
+        }
+    }
+
+    /**
+     * VPN-up batch freeze using the authoritative main-profile auto-freeze list.
+     * Safe from the `:vpnwatch` FGS in either profile; delivery runs in the default app process.
+     */
+    fun requestVpnBatchFreeze(context: Context) {
+        val app = context.applicationContext
+        if (AntiSpyManager.isWorkProfile(app)) {
+            scheduleVpnBatchFreezeOnMainProfile(app)
+            return
+        }
+        // `:vpnwatch` cannot reliably start cross-profile work from the main process; wake the
+        // default app process where [AntiSpyVpnFreezeReceiver] runs.
+        scheduleVpnBatchFreezeInAppProcess(app)
+        sendVpnBatchFreezeBroadcast(app)
+    }
+
+    /** Schedule [AntiSpyVpnFreezeReceiver] in the default app process (same user). */
+    private fun scheduleVpnBatchFreezeInAppProcess(context: Context) {
+        try {
+            val intent = vpnBatchFreezeReceiverIntent(context)
+            val pi = PendingIntent.getBroadcast(
+                context,
+                0xE49E4,
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            val am = context.getSystemService(AlarmManager::class.java)
+            if (am != null) {
+                am.set(
+                    AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                    SystemClock.elapsedRealtime() + 50,
+                    pi
+                )
+                Log.i(TAG, "scheduled VPN batch freeze in app process")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "scheduleVpnBatchFreezeInAppProcess failed", e)
+        }
+    }
+
+    /** Work profile → main profile when background broadcast is blocked. */
+    fun scheduleVpnBatchFreezeOnMainProfile(context: Context) {
+        try {
+            val intent = vpnBatchFreezeReceiverIntent(context)
+            transferIntentToProfile(context, intent)
+            val pi = PendingIntent.getBroadcast(
+                context,
+                0xE49E5,
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            val am = context.getSystemService(AlarmManager::class.java)
+            if (am != null) {
+                am.set(
+                    AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                    SystemClock.elapsedRealtime() + 50,
+                    pi
+                )
+                Log.i(TAG, "scheduled VPN batch freeze on main profile")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "scheduleVpnBatchFreezeOnMainProfile failed", e)
+        }
+    }
+
+    private fun vpnBatchFreezeReceiverIntent(context: Context): Intent =
+        Intent(AntiSpyVpnFreezeReceiver.ACTION).apply {
+            setPackage(context.packageName)
+            component = ComponentName(context, AntiSpyVpnFreezeReceiver::class.java)
+        }
+
+    private fun sendVpnBatchFreezeBroadcast(context: Context) {
+        try {
+            context.sendBroadcast(vpnBatchFreezeReceiverIntent(context))
+            Log.i(TAG, "VPN batch freeze broadcast sent")
+        } catch (e: Exception) {
+            Log.w(TAG, "VPN batch freeze broadcast failed", e)
+        }
+    }
+
     private fun freezeAllInListIntent(list: Array<String>): Intent {
         val intent = Intent(DummyActivity.FREEZE_ALL_IN_LIST)
         intent.putExtra("list", list)
@@ -229,36 +348,178 @@ object Utility {
     }
 
     /**
-     * After a background VPN batch-freeze in the work profile: refresh the personal-profile
-     * app list (with follow-up delays for slow PackageManager updates on some devices) and
-     * optionally show the success toast on the main profile.
+     * After a background VPN batch-freeze in the work profile: refresh both app-list tabs on the
+     * personal profile (with follow-up delays for slow PackageManager updates) and optionally
+     * show the success toast there.
      */
     fun notifyBatchFreezeComplete(context: Context, showSuccessToast: Boolean) {
-        scheduleAppListRefreshOnMainProfile(context)
-        scheduleAppListRefresh(context, APP_LIST_REFRESH_FOLLOWUP_DELAYS_MS)
+        scheduleAppListRefreshDelivery(context.applicationContext)
         if (showSuccessToast) {
-            showToastOnMainProfile(context, R.string.freeze_all_success)
+            scheduleShowToastOnMainProfile(context.applicationContext, R.string.freeze_all_success)
         }
     }
 
-    /** Refresh main-profile app lists after a freeze/unfreeze in the work profile. */
+    /** Notifies VPN watchers that every auto-freeze app is hidden for this VPN session. */
+    fun notifyVpnBatchFreezeSessionComplete(context: Context, showSuccessToast: Boolean) {
+        notifyBatchFreezeComplete(context, showSuccessToast)
+        try {
+            val intent = Intent(ACTION_VPN_BATCH_FREEZE_SESSION_COMPLETE).apply {
+                setPackage(context.packageName)
+            }
+            context.sendBroadcast(intent)
+        } catch (e: Exception) {
+            Log.w(TAG, "VPN batch-freeze session complete broadcast failed", e)
+        }
+    }
+
+    const val ACTION_VPN_BATCH_FREEZE_SESSION_COMPLETE =
+        "net.typeblog.shelter.action.VPN_BATCH_FREEZE_SESSION_COMPLETE"
+
+    /** Refresh both app-list tabs on the personal profile after work-profile freeze/unfreeze. */
     fun scheduleAppListRefreshOnMainProfile(context: Context) {
-        val dpm = context.getSystemService(android.app.admin.DevicePolicyManager::class.java)
-        if (dpm == null || !dpm.isProfileOwnerApp(context.packageName)) {
-            scheduleAppListRefresh(context)
+        scheduleAppListRefreshDelivery(context.applicationContext)
+    }
+
+    /**
+     * Deliver app-list refresh to the personal profile UI.
+     * From the work profile / {@code :vpnwatch}: cross-profile [DummyActivity.REFRESH_MAIN_APP_LIST].
+     */
+    fun scheduleAppListRefreshDelivery(context: Context) {
+        scheduleRefreshMainAppList(context.applicationContext)
+    }
+
+    /** Immediate refresh in the personal profile UI process. */
+    fun deliverAppListRefreshInMainProcess(context: Context) {
+        val app = context.applicationContext
+        if (AntiSpyManager.isWorkProfile(app)) {
+            scheduleRefreshMainAppList(app)
             return
         }
+        MainActivity.refreshIfVisible()
         try {
-            val intent = Intent(context, MainActivity::class.java).apply {
+            LocalBroadcastManager.getInstance(app)
+                .sendBroadcast(Intent(AppListFragment.BROADCAST_REFRESH))
+        } catch (e: Exception) {
+            Log.w(TAG, "local app-list refresh broadcast failed", e)
+        }
+        try {
+            val intent = Intent(app, MainActivity::class.java).apply {
                 action = MainActivity.ACTION_REFRESH_APP_LISTS
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
             }
-            transferIntentToProfile(context, intent)
-            AuthenticationUtility.signIntent(intent)
-            context.startActivity(intent)
+            app.startActivity(intent)
         } catch (e: Exception) {
-            Log.w(TAG, "scheduleAppListRefreshOnMainProfile failed", e)
-            scheduleAppListRefresh(context)
+            Log.w(TAG, "startActivity app-list refresh failed", e)
+        }
+    }
+
+    private fun refreshMainAppListIntent(context: Context, fromWork: Boolean): Intent {
+        val intent = Intent(DummyActivity.REFRESH_MAIN_APP_LIST).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        }
+        if (fromWork) {
+            transferIntentToProfile(context, intent)
+        } else {
+            intent.setClass(context, DummyActivity::class.java)
+        }
+        return intent
+    }
+
+    private fun scheduleRefreshMainAppList(context: Context) {
+        val app = context.applicationContext
+        val fromWork = AntiSpyManager.isWorkProfile(app)
+        try {
+            var requestCode = 0xE49E8
+            for (delay in APP_LIST_REFRESH_DELIVERY_DELAYS_MS) {
+                val intent = refreshMainAppListIntent(app, fromWork)
+                val pi = PendingIntent.getActivity(
+                    app,
+                    requestCode++,
+                    intent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                )
+                val am = app.getSystemService(AlarmManager::class.java)
+                am?.set(
+                    AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                    SystemClock.elapsedRealtime() + delay,
+                    pi,
+                )
+            }
+            Log.i(
+                TAG,
+                "scheduled personal-profile app-list refresh (work=$fromWork, " +
+                    "${APP_LIST_REFRESH_DELIVERY_DELAYS_MS.size} delays)",
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "scheduleRefreshMainAppList failed", e)
+            if (!fromWork) {
+                deliverAppListRefreshInMainProcess(app)
+            }
+        }
+    }
+
+    private fun appListRefreshReceiverIntent(context: Context): Intent =
+        Intent(AppListRefreshReceiver.ACTION).apply {
+            setPackage(context.packageName)
+            component = ComponentName(context, AppListRefreshReceiver::class.java)
+        }
+
+    private fun sendAppListRefreshBroadcast(context: Context) {
+        if (AntiSpyManager.isWorkProfile(context)) {
+            return
+        }
+        try {
+            context.sendBroadcast(appListRefreshReceiverIntent(context))
+            Log.i(TAG, "app-list refresh broadcast sent")
+        } catch (e: Exception) {
+            Log.w(TAG, "app-list refresh broadcast failed", e)
+        }
+    }
+
+    /**
+     * Cross-profile delivery of [DummyActivity.SHOW_TOAST] via AlarmManager (toast only).
+     */
+    private fun scheduleShowToastOnMainProfile(
+        context: Context,
+        toastResId: Int,
+        delaysMs: LongArray = longArrayOf(50L),
+    ) {
+        val app = context.applicationContext
+        val fromWork = AntiSpyManager.isWorkProfile(app)
+        try {
+            var requestCode = 0xE49E6
+            for (delay in delaysMs) {
+                val intent = Intent(DummyActivity.SHOW_TOAST).apply {
+                    putExtra(MainActivity.EXTRA_TOAST_RES_ID, toastResId)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                }
+                if (fromWork) {
+                    transferIntentToProfile(app, intent)
+                } else {
+                    intent.component = ComponentName(app, DummyActivity::class.java)
+                }
+                val pi = PendingIntent.getActivity(
+                    app,
+                    requestCode++,
+                    intent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                )
+                val am = app.getSystemService(AlarmManager::class.java)
+                am?.set(
+                    AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                    SystemClock.elapsedRealtime() + delay,
+                    pi,
+                )
+            }
+            Log.i(
+                TAG,
+                "scheduled main-profile refresh/toast (work=$fromWork, toast=$toastResId)",
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "scheduleShowToastOnMainProfile failed", e)
+            if (!fromWork) {
+                scheduleAppListRefresh(app, APP_LIST_REFRESH_FOLLOWUP_DELAYS_MS)
+            }
         }
     }
 
@@ -266,22 +527,10 @@ object Utility {
         val dpm = context.getSystemService(android.app.admin.DevicePolicyManager::class.java)
         if (dpm == null || !dpm.isProfileOwnerApp(context.packageName)) {
             ZindanToast.show(context, resId)
+            scheduleAppListRefresh(context, APP_LIST_REFRESH_FOLLOWUP_DELAYS_MS)
             return
         }
-        try {
-            // Action-only intent (no explicit component) so the system cross-profile forwarder
-            // resolves it to the personal-profile DummyActivity. An explicit component would
-            // bind to the (disabled) work-profile activity and break forwarding.
-            val intent = Intent(DummyActivity.SHOW_TOAST).apply {
-                putExtra(MainActivity.EXTRA_TOAST_RES_ID, resId)
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-            }
-            transferIntentToProfile(context, intent)
-            context.startActivity(intent)
-        } catch (e: Exception) {
-            Log.w(TAG, "showToastOnMainProfile failed", e)
-            ZindanToast.show(context, resId)
-        }
+        scheduleShowToastOnMainProfile(context.applicationContext, resId)
     }
 
     fun resolveApplicationLabel(context: Context, packageName: String): CharSequence {
@@ -391,6 +640,36 @@ object Utility {
             adminComponent,
             IntentFilter(DummyActivity.SHOW_TOAST),
             DevicePolicyManager.FLAG_PARENT_CAN_ACCESS_MANAGED
+        )
+
+        manager.addCrossProfileIntentFilter(
+            adminComponent,
+            IntentFilter(DummyActivity.REFRESH_MAIN_APP_LIST),
+            DevicePolicyManager.FLAG_PARENT_CAN_ACCESS_MANAGED
+        )
+
+        manager.addCrossProfileIntentFilter(
+            adminComponent,
+            IntentFilter(DummyActivity.REFRESH_MAIN_APP_LIST),
+            DevicePolicyManager.FLAG_MANAGED_CAN_ACCESS_PARENT
+        )
+
+        manager.addCrossProfileIntentFilter(
+            adminComponent,
+            IntentFilter(AppListRefreshReceiver.ACTION),
+            DevicePolicyManager.FLAG_PARENT_CAN_ACCESS_MANAGED
+        )
+
+        val mainRefreshFilter = IntentFilter(MainActivity.ACTION_REFRESH_APP_LISTS)
+        manager.addCrossProfileIntentFilter(
+            adminComponent,
+            mainRefreshFilter,
+            DevicePolicyManager.FLAG_PARENT_CAN_ACCESS_MANAGED
+        )
+        manager.addCrossProfileIntentFilter(
+            adminComponent,
+            mainRefreshFilter,
+            DevicePolicyManager.FLAG_MANAGED_CAN_ACCESS_PARENT
         )
 
         manager.addCrossProfileIntentFilter(
