@@ -88,6 +88,7 @@ class MainActivity : AppCompatActivity() {
     private var pendingVpnBlockReason = 0
     private var pendingLaunchPackageName: String? = null
     private var pendingBatchAction: String? = null
+    private var pendingApkInstallAfterVpnGate = false
     private var mainAppListFragment: AppListFragment? = null
     private var workAppListFragment: AppListFragment? = null
 
@@ -532,6 +533,30 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
+    /** Anti Spy: clear third-party VPN before opening the APK file picker for work-profile install. */
+    private fun runInstallApkAfterVpnGateCleared() {
+        pendingApkInstallAfterVpnGate = true
+        AntiSpyLaunchGate.runBeforeAutoFreezeAccess(
+            this,
+            LocalStorageManager.getInstance(),
+            "",
+            forceGate = true,
+            Runnable {
+                pendingApkInstallAfterVpnGate = false
+                selectApk.launch(null)
+            },
+            AntiSpyLaunchGate.BlockedCallback { reason ->
+                pendingVpnBlockReason = reason
+                showAntiSpyVpnLaunchBlockedDialog(reason)
+                if (reason == AntiSpyLaunchGate.REASON_VPN_PERMISSION_REQUIRED) {
+                    requestAntiSpyVpnPermission()
+                } else {
+                    pendingApkInstallAfterVpnGate = false
+                }
+            }
+        )
+    }
+
     private fun requestAntiSpyNotificationPermissionIfNeeded() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
@@ -557,6 +582,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun retryPendingLaunchAfterVpnPermission() {
+        if (pendingApkInstallAfterVpnGate) {
+            runInstallApkAfterVpnGateCleared()
+            return
+        }
         if (TextUtils.isEmpty(pendingLaunchPackageName)) return
         val launchIntent = Intent(DummyActivity.UNFREEZE_AND_LAUNCH).apply {
             component = ComponentName(this@MainActivity, DummyActivity::class.java)
@@ -572,10 +601,13 @@ class MainActivity : AppCompatActivity() {
             pendingVpnBlockReason = reason
             return
         }
-        val message = if (reason == AntiSpyLaunchGate.REASON_VPN_PERMISSION_REQUIRED) {
-            getString(R.string.anti_spy_vpn_permission_required)
-        } else {
-            getString(R.string.anti_spy_vpn_block_launch_manual)
+        val message = when {
+            reason == AntiSpyLaunchGate.REASON_VPN_PERMISSION_REQUIRED ->
+                getString(R.string.anti_spy_vpn_permission_required)
+            pendingApkInstallAfterVpnGate ->
+                getString(R.string.anti_spy_vpn_block_install_apk)
+            else ->
+                getString(R.string.anti_spy_vpn_block_launch_manual)
         }
         val builder = AlertDialog.Builder(this, R.style.AlertDialogTheme)
             .setTitle(R.string.anti_spy_vpn_block_title)
@@ -633,7 +665,7 @@ class MainActivity : AppCompatActivity() {
                 true
             }
             R.id.main_menu_install_app_to_profile -> {
-                selectApk.launch(null)
+                runInstallApkAfterVpnGateCleared()
                 true
             }
             R.id.main_menu_show_all -> {

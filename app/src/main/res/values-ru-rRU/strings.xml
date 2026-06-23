@@ -23,6 +23,7 @@
     <string name="settings_freeze_all_desc">Заморозить все приложения из списка автозаморозки</string>
     <string name="settings_unfreeze_all_desc">Разморозить все приложения из списка автозаморозки</string><string name="anti_spy_vpn_block_title">VPN активен</string>
     <string name="anti_spy_vpn_block_launch_manual">Не удалось запустить приложение. Отключите VPN вручную и повторите попытку.</string>
+    <string name="anti_spy_vpn_block_install_apk">Невозможно установить APK при активном VPN. Отключите VPN вручную и повторите попытку.</string>
     <string name="anti_spy_vpn_permission_required">Разрешите Zindan доступ к VPN один раз — Anti Spy сможет снимать сторонний VPN перед запуском.</string>
     <string name="anti_spy_vpn_permission_grant">Разрешить VPN</string>
     <string name="anti_spy_monitor_notification_title">Anti Spy</string>
