@@ -417,6 +417,62 @@ object Utility {
     }
 
     /**
+     * Store install in the work profile (e.g. RuStore): refresh personal-profile UI lists.
+     * Uses Activity + BroadcastReceiver delivery; Samsung may allow only one path.
+     */
+    fun scheduleAppListRefreshAfterWorkPackageInstall(context: Context) {
+        val app = context.applicationContext
+        if (AntiSpyManager.isWorkProfile(app)) {
+            scheduleAppListRefreshMainActivityOnMainProfile(app)
+            scheduleAppListRefreshReceiverOnMainProfile(app)
+        }
+        scheduleAppListRefreshDelivery(app)
+    }
+
+    /** Work profile → personal: wake [MainActivity] to refresh lists (needs manifest intent-filter). */
+    private fun scheduleAppListRefreshMainActivityOnMainProfile(context: Context) {
+        try {
+            val intent = Intent(MainActivity.ACTION_REFRESH_APP_LISTS).apply {
+                addFlags(
+                    Intent.FLAG_ACTIVITY_NEW_TASK or
+                        Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                        Intent.FLAG_ACTIVITY_NO_ANIMATION,
+                )
+            }
+            transferIntentToProfile(context, intent)
+            context.startActivity(intent)
+            Log.i(TAG, "started MainActivity app-list refresh from work profile")
+        } catch (e: Exception) {
+            Log.w(TAG, "scheduleAppListRefreshMainActivityOnMainProfile failed", e)
+        }
+    }
+
+    /** Work profile → personal: run [AppListRefreshReceiver] in the default app process. */
+    fun scheduleAppListRefreshReceiverOnMainProfile(context: Context) {
+        try {
+            val intent = appListRefreshReceiverIntent(context)
+            transferIntentToProfile(context, intent)
+            val pi = PendingIntent.getBroadcast(
+                context,
+                0xE49E9,
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+            val am = context.getSystemService(AlarmManager::class.java)
+            if (am != null) {
+                am.set(
+                    AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                    SystemClock.elapsedRealtime() + 50,
+                    pi,
+                )
+                Log.i(TAG, "scheduled app-list refresh receiver on main profile")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "scheduleAppListRefreshReceiverOnMainProfile failed", e)
+        }
+    }
+
+    /**
      * Deliver app-list refresh to the personal profile UI.
      * From the work profile / {@code :vpnwatch}: cross-profile [DummyActivity.REFRESH_MAIN_APP_LIST].
      */
@@ -488,7 +544,9 @@ object Utility {
             )
         } catch (e: Exception) {
             Log.w(TAG, "scheduleRefreshMainAppList failed", e)
-            if (!fromWork) {
+            if (fromWork) {
+                scheduleAppListRefreshReceiverOnMainProfile(app)
+            } else {
                 deliverAppListRefreshInMainProcess(app)
             }
         }
@@ -694,6 +752,11 @@ object Utility {
             adminComponent,
             IntentFilter(AppListRefreshReceiver.ACTION),
             DevicePolicyManager.FLAG_PARENT_CAN_ACCESS_MANAGED
+        )
+        manager.addCrossProfileIntentFilter(
+            adminComponent,
+            IntentFilter(AppListRefreshReceiver.ACTION),
+            DevicePolicyManager.FLAG_MANAGED_CAN_ACCESS_PARENT
         )
 
         val mainRefreshFilter = IntentFilter(MainActivity.ACTION_REFRESH_APP_LISTS)

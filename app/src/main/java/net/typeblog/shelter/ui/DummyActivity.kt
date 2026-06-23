@@ -545,6 +545,8 @@ class DummyActivity : Activity() {
             if (packageName != null) {
                 AutoFreezeDefaults.enableForWorkProfile(this, packageName, clearOptOut = true)
             }
+            Utility.deliverAppListRefreshInMainProcess(this)
+            Utility.scheduleAppListRefresh(this, longArrayOf(700L, 2000L, 4500L))
         }
         finish()
     }

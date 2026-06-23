@@ -14,7 +14,9 @@ import android.net.Uri
 import android.net.VpnService
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.RemoteException
 import android.text.TextUtils
 import android.util.TypedValue
@@ -37,11 +39,13 @@ import net.typeblog.shelter.BuildConfig
 import net.typeblog.shelter.R
 import net.typeblog.shelter.ShelterApplication
 import net.typeblog.shelter.services.IAppInstallCallback
+import net.typeblog.shelter.services.IGetAppsCallback
 import net.typeblog.shelter.services.IShelterService
 import net.typeblog.shelter.services.IStartActivityProxy
 import net.typeblog.shelter.services.KillerService
 import net.typeblog.shelter.util.AntiSpyLaunchGate
 import net.typeblog.shelter.util.AntiSpyManager
+import net.typeblog.shelter.util.ApplicationInfoWrapper
 import net.typeblog.shelter.util.LocalStorageManager
 import net.typeblog.shelter.util.SettingsManager
 import net.typeblog.shelter.util.UriForwardProxy
@@ -91,6 +95,8 @@ class MainActivity : AppCompatActivity() {
     private var pendingApkInstallAfterVpnGate = false
     private var mainAppListFragment: AppListFragment? = null
     private var workAppListFragment: AppListFragment? = null
+    private val workListPollHandler = Handler(Looper.getMainLooper())
+    private var workPackageSnapshot: Set<String>? = null
 
     private val antiSpyVpnBlockReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -281,6 +287,7 @@ class MainActivity : AppCompatActivity() {
                 runAntiSpyStartupFreezeIfNeeded()
                 AntiSpyManager.syncVpnWatchEverywhere(this@MainActivity)
                 runPendingBatchShortcutAction()
+                startWorkListPolling()
             }
             buildView()
         }
@@ -459,11 +466,14 @@ class MainActivity : AppCompatActivity() {
             val intent = intent
             finish()
             startActivity(intent)
+            return
         }
+        startWorkListPolling()
     }
 
     override fun onPause() {
         isResumed = false
+        stopWorkListPolling()
         if (visibleInstance === this) {
             visibleInstance = null
         }
@@ -471,6 +481,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        stopWorkListPolling()
         LocalBroadcastManager.getInstance(this)
             .unregisterReceiver(antiSpyVpnBlockReceiver)
         LocalBroadcastManager.getInstance(this)
@@ -697,6 +708,63 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private val workListPollRunnable = Runnable { pollWorkAppListChanges() }
+
+    /** Detect RuStore / work-profile installs while the user stays on the work tab. */
+    private fun startWorkListPolling() {
+        workListPollHandler.removeCallbacks(workListPollRunnable)
+        if (!isResumed || !servicesAlive()) {
+            return
+        }
+        workListPollHandler.post(workListPollRunnable)
+    }
+
+    private fun stopWorkListPolling() {
+        workListPollHandler.removeCallbacks(workListPollRunnable)
+        workPackageSnapshot = null
+    }
+
+    private fun pollWorkAppListChanges() {
+        if (!isResumed) {
+            stopWorkListPolling()
+            return
+        }
+        val work = serviceWork
+        if (work == null || !servicesAlive()) {
+            workListPollHandler.postDelayed(workListPollRunnable, WORK_LIST_POLL_INTERVAL_MS)
+            return
+        }
+        try {
+            work.getApps(object : IGetAppsCallback.Stub() {
+                override fun callback(apps: MutableList<ApplicationInfoWrapper>) {
+                    if (!isResumed) {
+                        return
+                    }
+                    val current = apps.map { it.getPackageName() }.toSet()
+                    val previous = workPackageSnapshot
+                    if (previous != null && previous != current) {
+                        android.util.Log.i(
+                            "MainActivity",
+                            "work profile app set changed (${previous.size} -> ${current.size}), refreshing",
+                        )
+                        runOnUiThread { refreshAppLists() }
+                    }
+                    workPackageSnapshot = current
+                    if (isResumed) {
+                        workListPollHandler.postDelayed(
+                            workListPollRunnable,
+                            WORK_LIST_POLL_INTERVAL_MS,
+                        )
+                    }
+                }
+            }, showAll)
+        } catch (_: RemoteException) {
+            if (isResumed) {
+                workListPollHandler.postDelayed(workListPollRunnable, WORK_LIST_POLL_INTERVAL_MS)
+            }
+        }
+    }
+
     fun refreshAppLists() {
         val fragments = LinkedHashSet<AppListFragment>()
         mainAppListFragment?.let { fragments.add(it) }
@@ -774,5 +842,6 @@ class MainActivity : AppCompatActivity() {
             "net.typeblog.shelter.broadcast.SEARCH_FILTER_CHANGED"
         private val APP_LIST_FRAGMENT_TAGS = arrayOf("f0", "f1")
         private const val APP_LIST_INSTALL_REFRESH_MS = 2000L
+        private const val WORK_LIST_POLL_INTERVAL_MS = 2000L
     }
 }

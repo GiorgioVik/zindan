@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 import net.typeblog.shelter.util.AutoFreezeDefaults
+import net.typeblog.shelter.util.Utility
 
 /**
  * Work profile only: assign auto-freeze to apps installed outside Zindan (e.g. RuStore).
@@ -30,6 +31,7 @@ class WorkProfilePackageAddedReceiver : BroadcastReceiver() {
         try {
             Log.i(TAG, "package added in work profile: $packageName")
             AutoFreezeDefaults.requestEnableOnMainProfile(context, packageName)
+            Utility.scheduleAppListRefreshAfterWorkPackageInstall(context)
         } finally {
             pendingResult.finish()
         }

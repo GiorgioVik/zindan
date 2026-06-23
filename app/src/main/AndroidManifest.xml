@@ -54,6 +54,7 @@
                 <action android:name="net.typeblog.shelter.action.BATCH_FREEZE_ALL" />
                 <action android:name="net.typeblog.shelter.action.BATCH_UNFREEZE_ALL" />
                 <action android:name="net.typeblog.shelter.action.SHOW_BATCH_TOAST" />
+                <action android:name="net.typeblog.shelter.action.REFRESH_APP_LISTS" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
@@ -99,6 +100,8 @@
                 <action android:name="net.typeblog.shelter.action.FREEZE_ALL_IN_LIST" />
                 <action android:name="net.typeblog.shelter.action.UNFREEZE_ALL_IN_LIST" />
                 <action android:name="net.typeblog.shelter.action.ENABLE_AUTO_FREEZE_WORK_PROFILE" />
+                <action android:name="net.typeblog.shelter.action.REFRESH_MAIN_APP_LIST" />
+                <action android:name="net.typeblog.shelter.action.VPN_SESSION_COMPLETE" />
                 <action android:name="net.typeblog.shelter.action.REMOVE_UNFREEZE_SHORTCUT" />
                 <!-- We need two of these to avoid being prompted with an action chooser dialog -->
                 <!-- When the intent is actually already forwarded to work profile -->
