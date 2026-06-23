@@ -1,0 +1,88 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v1.5.3-*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. v1.5.3-235)'
+        required: true
+        default: 'v1.5.3-235'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve tag
+        id: meta
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ github.event.inputs.tag }}"
+          else
+            TAG="${GITHUB_REF_NAME}"
+          fi
+          CODE="${TAG##*-}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "code=${CODE}" >> "$GITHUB_OUTPUT"
+          echo "title=Zindan 1.5.3 (${CODE})" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          ref: ${{ steps.meta.outputs.tag }}
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Pin version code from tag
+        run: |
+          CODE="${{ steps.meta.outputs.code }}"
+          echo "Building versionCode ${CODE}"
+          sed -i "s/^VERSION_CODE=.*/VERSION_CODE=$((CODE - 1))/" version.properties
+          grep VERSION version.properties
+
+      - name: Assemble debug APK
+        run: ./gradlew :app:assembleDebug --stacktrace --no-daemon
+
+      - name: Locate APK
+        id: apk
+        run: |
+          APK=$(ls app/build/outputs/apk/debug/Zindan-*.apk | head -1)
+          echo "path=${APK}" >> "$GITHUB_OUTPUT"
+          echo "name=$(basename "${APK}")" >> "$GITHUB_OUTPUT"
+
+      - name: Write release notes
+        run: |
+          NOTES="RELEASE_NOTES_${{ steps.meta.outputs.tag }}.md"
+          if [ -f "${NOTES}" ]; then
+            cp "${NOTES}" release-notes.md
+          else
+            cat > release-notes.md <<EOF
+          ## Zindan 1.5.3 (${{ steps.meta.outputs.code }})
+
+          Debug APK built from tag \`${{ steps.meta.outputs.tag }}\`.
+
+          See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md).
+          EOF
+          fi
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: ${{ steps.meta.outputs.title }}
+          body_path: release-notes.md
+          files: ${{ steps.apk.outputs.path }}
+          make_latest: true
