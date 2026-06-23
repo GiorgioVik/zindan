@@ -2,7 +2,9 @@
 
 Zindan is a fork of [Shelter](https://cgit.typeblog.net/Shelter/about/) — a Free and Open-Source (FOSS) Android app that uses the **Work Profile** feature to run apps in an isolated space. You can clone apps into the work profile, freeze them when not in use, and batch-freeze the auto-freeze list from the toolbar or launcher shortcuts.
 
-**Current release:** **1.5.3** (versionCode **235**, field-tested June 2026) — see [BASELINE_1.5.3.md](BASELINE_1.5.3.md).
+**Current release:** **1.5.3** (versionCode **235**, field-tested June 2026) — [latest release](https://github.com/GiorgioVik/zindan/releases/latest) · [BASELINE_1.5.3.md](BASELINE_1.5.3.md).
+
+**Default branch on GitHub:** `main` (release line 1.5.3). The old branch name `v1.5.2` is a historical label for the same fork line, not the app version.
 
 Shelter remains the upstream base; Zindan adds branding, Russian UX polish, Anti Spy VPN handling, top-of-screen toasts, and Samsung-focused field testing.
 
@@ -76,7 +78,7 @@ First-time setup while keeping the working tree on `D:\Zindan5`:
 3. Commit and push:
 
    ```powershell
-   git push -u origin v1.5.2
+   git push -u origin main
    git push origin --tags
    ```
 
