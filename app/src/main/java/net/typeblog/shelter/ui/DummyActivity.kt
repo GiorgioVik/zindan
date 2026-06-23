@@ -112,6 +112,7 @@ class DummyActivity : Activity() {
             START_FILE_SHUTTLE, START_FILE_SHUTTLE_2 -> actionStartFileShuttle()
             SYNCHRONIZE_PREFERENCE -> actionSynchronizePreference()
             SYNC_ANTI_SPY_VPN_WATCH -> actionSyncAntiSpyVpnWatch()
+            VPN_SESSION_COMPLETE -> actionVpnSessionComplete()
             PACKAGEINSTALLER_CALLBACK -> handlePackageInstallerCallback(intent)
             else -> finish()
         }
@@ -702,7 +703,10 @@ class DummyActivity : Activity() {
                 .setStringList(LocalStorageManager.PREF_AUTO_FREEZE_LIST_WORK_PROFILE, list)
             AntiSpyVpnWatchService.syncState(this)
             val frozen = WorkProfileBatchFreeze.freezeList(this, list)
-            if (frozen > 0) {
+            val stillVisible = WorkProfileBatchFreeze.countStillVisible(this, list)
+            if (stillVisible == 0) {
+                Utility.notifyVpnBatchFreezeSessionComplete(this, frozen > 0)
+            } else if (frozen > 0) {
                 Utility.postVpnAutoFreezeSuccessAlert(this)
                 Utility.showToastOnMainProfile(this, R.string.freeze_all_success)
             }
@@ -817,6 +821,16 @@ class DummyActivity : Activity() {
         finish()
     }
 
+    /** Work profile → personal: stop both :vpnwatch poll loops after VPN batch-freeze. */
+    private fun actionVpnSessionComplete() {
+        if (!isProfileOwner) {
+            Utility.deliverVpnBatchFreezeSessionComplete(this)
+            finishBatchShortcutFlow()
+        } else {
+            finish()
+        }
+    }
+
     companion object {
         const val FINALIZE_PROVISION = "net.typeblog.shelter.action.FINALIZE_PROVISION"
         const val START_SERVICE = "net.typeblog.shelter.action.START_SERVICE"
@@ -841,6 +855,8 @@ class DummyActivity : Activity() {
         const val SYNCHRONIZE_PREFERENCE = "net.typeblog.shelter.action.SYNCHRONIZE_PREFERENCE"
         const val SYNC_ANTI_SPY_VPN_WATCH =
             "net.typeblog.shelter.action.SYNC_ANTI_SPY_VPN_WATCH"
+        const val VPN_SESSION_COMPLETE =
+            "net.typeblog.shelter.action.VPN_SESSION_COMPLETE"
         const val PACKAGEINSTALLER_CALLBACK = "net.typeblog.shelter.action.PACKAGEINSTALLER_CALLBACK"
 
         private val ACTIONS_ALLOWED_WITHOUT_SIGNATURE = listOf(

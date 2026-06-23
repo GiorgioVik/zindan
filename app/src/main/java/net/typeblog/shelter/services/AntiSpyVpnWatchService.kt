@@ -45,6 +45,8 @@ class AntiSpyVpnWatchService : Service() {
     private var freezeCompleteReceiver: BroadcastReceiver? = null
     private var vpnFreezeInFlight = false
     private var vpnFreezeDoneForSession = false
+    /** Main :vpnwatch dispatches [Utility.requestVpnBatchFreeze] at most once per VPN-up session. */
+    private var mainVpnBatchFreezeDispatched = false
 
     override fun onCreate() {
         super.onCreate()
@@ -211,6 +213,7 @@ class AntiSpyVpnWatchService : Service() {
         handler.removeCallbacks(freezeRunnable)
         if (!vpnActive) {
             vpnFreezeDoneForSession = false
+            mainVpnBatchFreezeDispatched = false
             AntiSpyVpnPromptManager.onVpnSessionEnded()
             if (isMainProfileWatcher()) {
                 postVpnStateAlert(R.string.anti_spy_vpn_alert_disconnected_text)
@@ -233,6 +236,9 @@ class AntiSpyVpnWatchService : Service() {
     }
 
     private fun maybeFreezeAllForVpn() {
+        if (vpnFreezeDoneForSession) {
+            return
+        }
         if (AntiSpyDummyVpnDisconnector.isSuppressingVpnReactions()) {
             Log.d(TAG, "freeze skipped: dummy vpn cycle")
             return
@@ -248,31 +254,36 @@ class AntiSpyVpnWatchService : Service() {
         if (vpnFreezeInFlight) return
         vpnFreezeInFlight = true
         try {
-            Utility.requestVpnBatchFreeze(this)
-            val profile = if (isMainProfileWatcher()) "MAIN" else "WORK"
-            Log.i(TAG, "VPN batch-freeze requested from $profile watcher")
-            postFreezeDiagnostic("$profile: запрос заморозки (основной список)")
+            if (isMainProfileWatcher()) {
+                if (!mainVpnBatchFreezeDispatched) {
+                    mainVpnBatchFreezeDispatched = true
+                    Utility.requestVpnBatchFreeze(this)
+                    Log.i(TAG, "VPN batch-freeze requested from MAIN watcher (once per session)")
+                    postFreezeDiagnostic("MAIN: запрос заморозки (основной список)")
+                }
+                return
+            }
 
-            // Work profile is profile owner: freeze immediately via DPM (reliable from :vpnwatch).
-            // Main-profile receiver also delivers the authoritative list cross-profile in parallel.
-            if (!isMainProfileWatcher()) {
-                val list = AntiSpyManager.getAutoFreezeList(this)
-                if (list.isEmpty()) {
-                    postFreezeDiagnostic("WORK: список пуст — открой Zindan один раз")
+            Utility.requestVpnBatchFreeze(this)
+            Log.i(TAG, "VPN batch-freeze requested from WORK watcher")
+            postFreezeDiagnostic("WORK: запрос заморозки (основной список)")
+
+            val list = AntiSpyManager.getAutoFreezeList(this)
+            if (list.isEmpty()) {
+                postFreezeDiagnostic("WORK: список пуст — открой Zindan один раз")
+            } else {
+                val frozen = WorkProfileBatchFreeze.freezeList(this, list)
+                val stillVisible = WorkProfileBatchFreeze.countStillVisible(this, list)
+                Log.i(
+                    TAG,
+                    "VPN direct freeze in work: $frozen of ${list.size}, stillVisible=$stillVisible"
+                )
+                if (stillVisible > 0) {
+                    postFreezeDiagnostic("WORK: не заморожено $stillVisible — повтор…")
                 } else {
-                    val frozen = WorkProfileBatchFreeze.freezeList(this, list)
-                    val stillVisible = WorkProfileBatchFreeze.countStillVisible(this, list)
-                    vpnFreezeDoneForSession = stillVisible == 0
-                    Log.i(
-                        TAG,
-                        "VPN direct freeze in work: $frozen of ${list.size}, stillVisible=$stillVisible"
-                    )
-                    if (stillVisible > 0) {
-                        postFreezeDiagnostic("WORK: не заморожено $stillVisible — повтор…")
-                    } else {
-                        postFreezeDiagnostic("WORK: заморожено $frozen из ${list.size}")
-                        Utility.notifyVpnBatchFreezeSessionComplete(this, frozen > 0)
-                    }
+                    postFreezeDiagnostic("WORK: заморожено $frozen из ${list.size}")
+                    vpnFreezeDoneForSession = true
+                    Utility.notifyVpnBatchFreezeSessionComplete(this, frozen > 0)
                 }
             }
         } finally {

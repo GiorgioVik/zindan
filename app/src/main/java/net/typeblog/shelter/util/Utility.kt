@@ -362,13 +362,49 @@ object Utility {
     /** Notifies VPN watchers that every auto-freeze app is hidden for this VPN session. */
     fun notifyVpnBatchFreezeSessionComplete(context: Context, showSuccessToast: Boolean) {
         notifyBatchFreezeComplete(context, showSuccessToast)
+        deliverVpnBatchFreezeSessionComplete(context.applicationContext)
+        if (AntiSpyManager.isWorkProfile(context)) {
+            scheduleVpnSessionCompleteOnMainProfile(context.applicationContext)
+        }
+    }
+
+    /** Broadcast [ACTION_VPN_BATCH_FREEZE_SESSION_COMPLETE] in the current user/profile. */
+    fun deliverVpnBatchFreezeSessionComplete(context: Context) {
         try {
             val intent = Intent(ACTION_VPN_BATCH_FREEZE_SESSION_COMPLETE).apply {
                 setPackage(context.packageName)
             }
-            context.sendBroadcast(intent)
+            context.applicationContext.sendBroadcast(intent)
+            Log.i(TAG, "VPN batch-freeze session complete broadcast sent")
         } catch (e: Exception) {
             Log.w(TAG, "VPN batch-freeze session complete broadcast failed", e)
+        }
+    }
+
+    /** Work profile → personal: wake main :vpnwatch via cross-profile Activity (Samsung-safe). */
+    private fun scheduleVpnSessionCompleteOnMainProfile(context: Context) {
+        try {
+            val intent = Intent(DummyActivity.VPN_SESSION_COMPLETE).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            }
+            transferIntentToProfile(context, intent)
+            val pi = PendingIntent.getActivity(
+                context,
+                0xE49E7,
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            val am = context.getSystemService(AlarmManager::class.java)
+            if (am != null) {
+                am.set(
+                    AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                    SystemClock.elapsedRealtime() + 50,
+                    pi
+                )
+                Log.i(TAG, "scheduled VPN session complete on main profile")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "scheduleVpnSessionCompleteOnMainProfile failed", e)
         }
     }
 
@@ -732,6 +768,12 @@ object Utility {
         manager.addCrossProfileIntentFilter(
             adminComponent,
             IntentFilter(DummyActivity.SYNC_ANTI_SPY_VPN_WATCH),
+            DevicePolicyManager.FLAG_MANAGED_CAN_ACCESS_PARENT
+        )
+
+        manager.addCrossProfileIntentFilter(
+            adminComponent,
+            IntentFilter(DummyActivity.VPN_SESSION_COMPLETE),
             DevicePolicyManager.FLAG_MANAGED_CAN_ACCESS_PARENT
         )
 

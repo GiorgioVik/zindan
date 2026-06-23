@@ -117,6 +117,7 @@ class LocalStorageManager private constructor(context: Context) {
                 .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                 .getString(pref, "")!!
                 .split(LIST_DIVIDER)
+                .filter { it.isNotEmpty() }
                 .toTypedArray()
 
         fun readBooleanFresh(context: Context, pref: String, defaultValue: Boolean): Boolean =

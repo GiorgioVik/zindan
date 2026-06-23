@@ -38,7 +38,7 @@ object AutoFreezeDefaults {
     fun enableForWorkProfile(context: Context?, packageName: String?, clearOptOut: Boolean = false) {
         enableForWorkProfile(packageName, clearOptOut)
         if (context != null) {
-            AntiSpyManager.syncAutoFreezeListToWorkProfile(context.applicationContext)
+            AntiSpyManager.syncAutoFreezeListToWorkProfile(context.applicationContext, force = true)
         }
     }
 
@@ -119,9 +119,9 @@ object AutoFreezeDefaults {
         context: Context?,
         previous: Set<String>?,
         current: Collection<String>?
-    ) {
+    ): Boolean {
         if (current == null) {
-            return
+            return false
         }
         val storage = LocalStorageManager.getInstance()
         val currentSet = current.toHashSet()
@@ -161,9 +161,9 @@ object AutoFreezeDefaults {
                 currentSet.toTypedArray()
             )
             if (changed && context != null) {
-                AntiSpyManager.syncAutoFreezeListToWorkProfile(context.applicationContext)
+                AntiSpyManager.syncAutoFreezeListToWorkProfile(context.applicationContext, force = true)
             }
-            return
+            return changed
         }
 
         val sessionPrev = previous ?: known
@@ -191,8 +191,9 @@ object AutoFreezeDefaults {
             currentSet.toTypedArray()
         )
         if (changed && context != null) {
-            AntiSpyManager.syncAutoFreezeListToWorkProfile(context.applicationContext)
+            AntiSpyManager.syncAutoFreezeListToWorkProfile(context.applicationContext, force = true)
         }
+        return changed
     }
 
     fun requestEnableOnMainProfile(context: Context, packageName: String?) {

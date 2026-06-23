@@ -3,6 +3,7 @@ package net.typeblog.shelter.receivers
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.os.SystemClock
 import android.util.Log
 import net.typeblog.shelter.util.AntiSpyManager
 import net.typeblog.shelter.util.LocalStorageManager
@@ -30,6 +31,13 @@ class AntiSpyVpnFreezeReceiver : BroadcastReceiver() {
         if (AntiSpyManager.isWorkProfile(app)) {
             return
         }
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastHandleElapsedMs < HANDLE_DEBOUNCE_MS) {
+            Log.d(TAG, "VPN batch freeze: debounced")
+            return
+        }
+        lastHandleElapsedMs = now
+
         val list = Utility.normalizeStringList(AntiSpyManager.getAutoFreezeList(app))
         if (list.isEmpty()) {
             Log.w(TAG, "VPN batch freeze: auto-freeze list is empty")
@@ -42,11 +50,12 @@ class AntiSpyVpnFreezeReceiver : BroadcastReceiver() {
             return
         }
         Log.i(TAG, "VPN batch freeze requested, list=${list.size}")
-        // FREEZE_ALL_IN_LIST persists the authoritative main list in work prefs and freezes via DPM.
-        Utility.scheduleFreezeInWorkProfile(app, list)
+        // Work :vpnwatch performs DPM freeze; receiver is a one-shot fallback when work list is stale.
+        val launched = Utility.launchFreezeInWorkProfile(app, list)
         val started = Utility.startBatchFreezeInWorkProfile(app, list)
-        if (!started) {
-            Log.w(TAG, "startBatchFreezeInWorkProfile failed (AlarmManager activity already scheduled)")
+        if (!launched && !started) {
+            Utility.scheduleFreezeInWorkProfile(app, list)
+            Log.w(TAG, "VPN batch freeze: cross-profile delivery failed, AlarmManager fallback")
         }
         Utility.postUserAlert(
             app,
@@ -59,6 +68,9 @@ class AntiSpyVpnFreezeReceiver : BroadcastReceiver() {
     companion object {
         private const val TAG = "AntiSpyVpnFreeze"
         private const val DIAG_NOTIFICATION_ID = 0xe49dc
+        private const val HANDLE_DEBOUNCE_MS = 5000L
+        @Volatile
+        private var lastHandleElapsedMs = 0L
         const val ACTION = "net.typeblog.shelter.action.VPN_BATCH_FREEZE"
     }
 }

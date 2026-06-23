@@ -35,6 +35,14 @@ class BatchFreezeService : Service() {
                 .getStringList(LocalStorageManager.PREF_AUTO_FREEZE_LIST_WORK_PROFILE)
         }
         list = Utility.normalizeStringList(list)
+        if (list.isEmpty()) {
+            Log.w(TAG, "empty auto-freeze list, skipping VPN batch freeze")
+            stopSelf()
+            return START_NOT_STICKY
+        }
+        // Mirror authoritative main-profile list so the work :vpnwatch process can retry locally.
+        LocalStorageManager.getInstance()
+            .setStringList(LocalStorageManager.PREF_AUTO_FREEZE_LIST_WORK_PROFILE, list)
         Log.i(TAG, "freeze requested pid=${Process.myPid()} list size=${list.size}")
         val newlyFrozen = WorkProfileBatchFreeze.freezeList(this, list)
         val stillVisible = WorkProfileBatchFreeze.countStillVisible(this, list)
