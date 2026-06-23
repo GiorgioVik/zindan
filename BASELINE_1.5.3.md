@@ -47,3 +47,21 @@ git checkout v1.5.3-baseline
 ```
 
 Previous baseline: [BASELINE_1.5.2.md](BASELINE_1.5.2.md) (`v1.5.2-baseline`, build 177).
+
+---
+
+## Field test update — build 235 (2026-06-23)
+
+**Git commit:** `9c707c1`  
+**APK:** `Zindan-1.5.3-(235)-debug.apk`  
+**Devices:** Samsung Galaxy S24 Ultra, Tab S9 FE+
+
+| Area | Result |
+|------|--------|
+| VPN-up auto-freeze (scenario 2) | ✅ confirmed (build 231+) |
+| RuStore install → auto-freeze snowflake | ✅ confirmed (build 231) |
+| RuStore install → work list refresh without tab switch | ✅ confirmed (build 235) |
+| Menu APK install blocked while VPN active | ✅ confirmed (build 229) |
+| In-place APK update (no work profile reinstall) | ✅ confirmed (build 235) |
+
+See [PROBLEMS.md](PROBLEMS.md) for the full test matrix and [CHANGELOG.md](CHANGELOG.md) for release notes since build 211.

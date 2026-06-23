@@ -2,7 +2,7 @@
 
 Zindan is a fork of [Shelter](https://cgit.typeblog.net/Shelter/about/) — a Free and Open-Source (FOSS) Android app that uses the **Work Profile** feature to run apps in an isolated space. You can clone apps into the work profile, freeze them when not in use, and batch-freeze the auto-freeze list from the toolbar or launcher shortcuts.
 
-**Current release:** **1.5.3** (versionCode **208**) — see [BASELINE_1.5.3.md](BASELINE_1.5.3.md).
+**Current release:** **1.5.3** (versionCode **235**, field-tested June 2026) — see [BASELINE_1.5.3.md](BASELINE_1.5.3.md).
 
 Shelter remains the upstream base; Zindan adds branding, Russian UX polish, Anti Spy VPN handling, top-of-screen toasts, and Samsung-focused field testing.
 

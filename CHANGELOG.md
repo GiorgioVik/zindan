@@ -1,3 +1,13 @@
+1.5.3 (235)
+===
+
+**APK:** `Zindan-1.5.3-(235)-debug.apk`
+
+- Work profile list after RuStore (or other store) install: auto-refresh while Zindan is open — no tab switch; missing cross-profile refresh intent-filters; periodic work-app-set polling in `MainActivity`.
+- VPN auto-freeze for store-installed apps (build 231): work-profile DPM path, authoritative auto-freeze list sync, session completion to stop Samsung poll loop.
+- Menu **Install APK into Zindan** gated behind Anti Spy VPN clear (build 229).
+- VPN batch-freeze routed through main-profile auto-freeze list; auto-freeze snowflake on work-profile store install (field-tested builds 215–231).
+
 1.5.3 (211)
 ===
 
