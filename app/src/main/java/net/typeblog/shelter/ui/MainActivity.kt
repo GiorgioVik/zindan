@@ -97,6 +97,21 @@ class MainActivity : AppCompatActivity() {
     private var workAppListFragment: AppListFragment? = null
     private val workListPollHandler = Handler(Looper.getMainLooper())
     private var workPackageSnapshot: Set<String>? = null
+    private var workListSignature: String? = null
+
+    private val appListRefreshReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            refreshAppLists()
+        }
+    }
+
+    private val vpnFreezeCompleteReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action == Utility.ACTION_VPN_BATCH_FREEZE_SESSION_COMPLETE) {
+                refreshAppLists()
+            }
+        }
+    }
 
     private val antiSpyVpnBlockReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -110,12 +125,6 @@ class MainActivity : AppCompatActivity() {
             }
             pendingVpnBlockReason = reason
             showAntiSpyVpnLaunchBlockedDialog(reason)
-        }
-    }
-
-    private val appListRefreshReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            refreshAppLists()
         }
     }
 
@@ -157,6 +166,15 @@ class MainActivity : AppCompatActivity() {
                 appListRefreshReceiver,
                 IntentFilter(AppListFragment.BROADCAST_REFRESH)
             )
+        registerReceiver(
+            vpnFreezeCompleteReceiver,
+            IntentFilter(Utility.ACTION_VPN_BATCH_FREEZE_SESSION_COMPLETE),
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                RECEIVER_NOT_EXPORTED
+            } else {
+                0
+            },
+        )
 
         init()
     }
@@ -486,6 +504,10 @@ class MainActivity : AppCompatActivity() {
             .unregisterReceiver(antiSpyVpnBlockReceiver)
         LocalBroadcastManager.getInstance(this)
             .unregisterReceiver(appListRefreshReceiver)
+        try {
+            unregisterReceiver(vpnFreezeCompleteReceiver)
+        } catch (_: IllegalArgumentException) {
+        }
         super.onDestroy()
         if (!restarting) {
             doOnDestroy()
@@ -544,7 +566,7 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
-    /** Anti Spy: clear third-party VPN before opening the APK file picker for work-profile install. */
+    /** Anti Spy: block APK install while VPN is active (do not displace the tunnel). */
     private fun runInstallApkAfterVpnGateCleared() {
         pendingApkInstallAfterVpnGate = true
         AntiSpyLaunchGate.runBeforeAutoFreezeAccess(
@@ -559,12 +581,9 @@ class MainActivity : AppCompatActivity() {
             AntiSpyLaunchGate.BlockedCallback { reason ->
                 pendingVpnBlockReason = reason
                 showAntiSpyVpnLaunchBlockedDialog(reason)
-                if (reason == AntiSpyLaunchGate.REASON_VPN_PERMISSION_REQUIRED) {
-                    requestAntiSpyVpnPermission()
-                } else {
-                    pendingApkInstallAfterVpnGate = false
-                }
-            }
+                pendingApkInstallAfterVpnGate = false
+            },
+            AntiSpyLaunchGate.VpnGateMode.BLOCK_IF_ACTIVE,
         )
     }
 
@@ -722,7 +741,11 @@ class MainActivity : AppCompatActivity() {
     private fun stopWorkListPolling() {
         workListPollHandler.removeCallbacks(workListPollRunnable)
         workPackageSnapshot = null
+        workListSignature = null
     }
+
+    private fun buildWorkListSignature(apps: List<ApplicationInfoWrapper>): String =
+        apps.joinToString("\u0000") { "${it.getPackageName()}:${it.isHidden()}" }
 
     private fun pollWorkAppListChanges() {
         if (!isResumed) {
@@ -741,15 +764,20 @@ class MainActivity : AppCompatActivity() {
                         return
                     }
                     val current = apps.map { it.getPackageName() }.toSet()
+                    val signature = buildWorkListSignature(apps)
                     val previous = workPackageSnapshot
-                    if (previous != null && previous != current) {
+                    val previousSignature = workListSignature
+                    if ((previous != null && previous != current) ||
+                        (previousSignature != null && previousSignature != signature)
+                    ) {
                         android.util.Log.i(
                             "MainActivity",
-                            "work profile app set changed (${previous.size} -> ${current.size}), refreshing",
+                            "work profile list changed (packages or freeze state), refreshing",
                         )
                         runOnUiThread { refreshAppLists() }
                     }
                     workPackageSnapshot = current
+                    workListSignature = signature
                     if (isResumed) {
                         workListPollHandler.postDelayed(
                             workListPollRunnable,
@@ -787,6 +815,11 @@ class MainActivity : AppCompatActivity() {
 
     private fun onApkSelected(uri: Uri?) {
         if (uri == null) return
+        if (AntiSpyLaunchGate.needsVpnClear(this, LocalStorageManager.getInstance())) {
+            pendingApkInstallAfterVpnGate = true
+            showAntiSpyVpnLaunchBlockedDialog(AntiSpyLaunchGate.REASON_VPN_STILL_ACTIVE)
+            return
+        }
         val proxy = UriForwardProxy(applicationContext, uri)
         try {
             serviceWork!!.installApk(proxy, object : IAppInstallCallback.Stub() {
@@ -842,6 +875,6 @@ class MainActivity : AppCompatActivity() {
             "net.typeblog.shelter.broadcast.SEARCH_FILTER_CHANGED"
         private val APP_LIST_FRAGMENT_TAGS = arrayOf("f0", "f1")
         private const val APP_LIST_INSTALL_REFRESH_MS = 2000L
-        private const val WORK_LIST_POLL_INTERVAL_MS = 2000L
+        private const val WORK_LIST_POLL_INTERVAL_MS = 1500L
     }
 }

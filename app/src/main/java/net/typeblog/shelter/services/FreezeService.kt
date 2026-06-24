@@ -18,6 +18,7 @@ import net.typeblog.shelter.receivers.ShelterDeviceAdminReceiver
 import net.typeblog.shelter.ui.DummyActivity
 import net.typeblog.shelter.util.SettingsManager
 import net.typeblog.shelter.util.Utility
+import net.typeblog.shelter.util.WorkProfileBatchFreeze
 import java.util.Date
 
 // This service simply registers a screen-off listener that will be called when the user
@@ -27,14 +28,13 @@ class FreezeService : Service() {
     private var usageStats: Map<String, UsageStats> = HashMap()
     private var screenLockTime: Long = -1
     private lateinit var alarmManager: AlarmManager
+    private var unlockReceiverRegistered = false
 
     private val freezeWork: AlarmManager.OnAlarmListener = AlarmManager.OnAlarmListener {
         synchronized(FreezeService::class.java) {
-            unregisterReceiver(unlockReceiver)
+            unregisterUnlockReceiverIfNeeded()
 
             if (appToFreeze.isNotEmpty()) {
-                val dpm = getSystemService(DevicePolicyManager::class.java)
-                val adminComponent = ComponentName(this, ShelterDeviceAdminReceiver::class.java)
                 for (app in appToFreeze) {
                     var shouldFreeze = true
                     val stats = usageStats[app]
@@ -46,7 +46,7 @@ class FreezeService : Service() {
                     }
 
                     if (shouldFreeze) {
-                        dpm.setApplicationHidden(adminComponent, app, true)
+                        WorkProfileBatchFreeze.freezeOne(this, app)
                     }
                 }
                 appToFreeze.clear()
@@ -58,6 +58,7 @@ class FreezeService : Service() {
     private val unlockReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             alarmManager.cancel(freezeWork)
+            unregisterUnlockReceiverIfNeeded()
         }
     }
 
@@ -82,7 +83,7 @@ class FreezeService : Service() {
                 freezeWork,
                 null,
             )
-            registerReceiver(unlockReceiver, IntentFilter(Intent.ACTION_SCREEN_ON))
+            registerUnlockReceiverIfNeeded()
         }
     }
 
@@ -94,11 +95,34 @@ class FreezeService : Service() {
     }
 
     override fun onDestroy() {
+        unregisterUnlockReceiverIfNeeded()
+        try {
+            unregisterReceiver(lockReceiver)
+        } catch (_: IllegalArgumentException) {
+        }
         super.onDestroy()
-        unregisterReceiver(lockReceiver)
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    private fun registerUnlockReceiverIfNeeded() {
+        if (unlockReceiverRegistered) {
+            return
+        }
+        registerReceiver(unlockReceiver, IntentFilter(Intent.ACTION_SCREEN_ON))
+        unlockReceiverRegistered = true
+    }
+
+    private fun unregisterUnlockReceiverIfNeeded() {
+        if (!unlockReceiverRegistered) {
+            return
+        }
+        try {
+            unregisterReceiver(unlockReceiver)
+        } catch (_: IllegalArgumentException) {
+        }
+        unlockReceiverRegistered = false
+    }
 
     private fun setForeground() {
         val notification = Utility.buildNotification(

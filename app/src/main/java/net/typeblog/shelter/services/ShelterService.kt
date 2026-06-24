@@ -21,6 +21,7 @@ import net.typeblog.shelter.util.ApplicationInfoWrapper
 import net.typeblog.shelter.util.FileProviderProxy
 import net.typeblog.shelter.util.UriForwardProxy
 import net.typeblog.shelter.util.Utility
+import net.typeblog.shelter.util.WorkProfileBatchFreeze
 
 class ShelterService : Service() {
     private var policyManager: DevicePolicyManager? = null
@@ -163,7 +164,7 @@ class ShelterService : Service() {
 
         override fun freezeApp(app: ApplicationInfoWrapper) {
             check(isProfileOwner) { "Cannot freeze app without being profile owner" }
-            policyManager!!.setApplicationHidden(adminComponent!!, app.getPackageName(), true)
+            WorkProfileBatchFreeze.freezeOne(this@ShelterService, app.getPackageName())
         }
 
         override fun unfreezeApp(app: ApplicationInfoWrapper) {

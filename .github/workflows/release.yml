@@ -3,13 +3,13 @@ name: Release
 on:
   push:
     tags:
-      - 'v1.5.3-*'
+      - 'v*-*'
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag (e.g. v1.5.3-235)'
+        description: 'Release tag (e.g. v1.5.4-242)'
         required: true
-        default: 'v1.5.3-235'
+        default: 'v1.5.4-242'
 
 permissions:
   contents: write
@@ -26,10 +26,12 @@ jobs:
           else
             TAG="${GITHUB_REF_NAME}"
           fi
+          VERSION=$(echo "${TAG}" | sed 's/^v//' | sed 's/-[^-]*$//')
           CODE="${TAG##*-}"
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "code=${CODE}" >> "$GITHUB_OUTPUT"
-          echo "title=Zindan 1.5.3 (${CODE})" >> "$GITHUB_OUTPUT"
+          echo "title=Zindan ${VERSION} (${CODE})" >> "$GITHUB_OUTPUT"
 
       - uses: actions/checkout@v4
         with:
@@ -70,7 +72,7 @@ jobs:
             cp "${NOTES}" release-notes.md
           else
             cat > release-notes.md <<EOF
-          ## Zindan 1.5.3 (${{ steps.meta.outputs.code }})
+          ## Zindan ${{ steps.meta.outputs.version }} (${{ steps.meta.outputs.code }})
 
           Debug APK built from tag \`${{ steps.meta.outputs.tag }}\`.
 

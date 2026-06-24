@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="zindanGreenDark">#223D2C</color>
+    <!-- Olive/bronze for frozen app rows (distinct from nav green #223D2C). -->
+    <color name="zindanOliveDark">#3A3528</color>
+    <color name="zindanOliveDarkSelected">#4A4432</color>
     <color name="zindanDarkYellow">#AA8843</color>
     <color name="zindanLightYellow">#F7E98E</color>
 
@@ -17,7 +20,7 @@
     <color name="setupWizardContentBackground">#FFFFFF</color>
     <color name="setupWizardNavText">@color/zindanDarkYellow</color>
     <color name="colorTextSecondary">#757575</color>
-    <color name="disabledAppBackground">@color/zindanGreenDark</color>
+    <color name="disabledAppBackground">@color/zindanOliveDark</color>
     <color name="selectedAppBackground">#D4E4D4</color>
-    <color name="selectedAndDisabledAppBackground">#B8D4B8</color>
+    <color name="selectedAndDisabledAppBackground">@color/zindanOliveDarkSelected</color>
 </resources>

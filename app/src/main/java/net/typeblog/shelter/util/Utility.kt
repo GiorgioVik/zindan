@@ -353,9 +353,16 @@ object Utility {
      * show the success toast there.
      */
     fun notifyBatchFreezeComplete(context: Context, showSuccessToast: Boolean) {
-        scheduleAppListRefreshDelivery(context.applicationContext)
+        val app = context.applicationContext
+        if (AntiSpyManager.isWorkProfile(app)) {
+            scheduleAppListRefreshMainActivityOnMainProfile(app)
+            scheduleAppListRefreshReceiverOnMainProfile(app)
+        } else {
+            deliverAppListRefreshInMainProcess(app)
+        }
+        scheduleAppListRefreshDelivery(app)
         if (showSuccessToast) {
-            scheduleShowToastOnMainProfile(context.applicationContext, R.string.freeze_all_success)
+            scheduleShowToastOnMainProfile(app, R.string.freeze_all_success)
         }
     }
 
@@ -1311,19 +1318,20 @@ object Utility {
     }
 
     fun getMediaStoreId(context: Context, path: String): Int {
-        val cursor: Cursor? = context.contentResolver.query(
+        context.contentResolver.query(
             MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
             arrayOf(MediaStore.MediaColumns._ID),
             MediaStore.MediaColumns.DATA + " LIKE ? ",
             arrayOf(path),
-            null
-        )
-        if (cursor == null || cursor.count == 0) {
-            return -1
-        } else {
+            null,
+        )?.use { cursor ->
+            if (cursor.count == 0) {
+                return -1
+            }
             cursor.moveToFirst()
             return cursor.getInt(cursor.getColumnIndex(MediaStore.MediaColumns._ID))
         }
+        return -1
     }
 
     fun calculateInSampleSize(options: BitmapFactory.Options, reqWidth: Int, reqHeight: Int): Int {
@@ -1345,26 +1353,40 @@ object Utility {
         return inSampleSize
     }
 
-    fun decodeSampledBitmap(filePath: String, reqWidth: Int, reqHeight: Int): Bitmap {
+    fun decodeSampledBitmap(filePath: String, reqWidth: Int, reqHeight: Int): Bitmap? {
         val options = BitmapFactory.Options()
         options.inJustDecodeBounds = true
         BitmapFactory.decodeFile(filePath, options)
+        if (options.outWidth <= 0 || options.outHeight <= 0) {
+            return null
+        }
 
         options.inSampleSize = calculateInSampleSize(options, reqWidth, reqHeight)
 
         options.inJustDecodeBounds = false
-        return BitmapFactory.decodeFile(filePath, options)!!
+        return try {
+            BitmapFactory.decodeFile(filePath, options)
+        } catch (_: OutOfMemoryError) {
+            null
+        }
     }
 
-    fun decodeSampledBitmap(fd: FileDescriptor, reqWidth: Int, reqHeight: Int): Bitmap {
+    fun decodeSampledBitmap(fd: FileDescriptor, reqWidth: Int, reqHeight: Int): Bitmap? {
         val options = BitmapFactory.Options()
         options.inJustDecodeBounds = true
         BitmapFactory.decodeFileDescriptor(fd, null, options)
+        if (options.outWidth <= 0 || options.outHeight <= 0) {
+            return null
+        }
 
         options.inSampleSize = calculateInSampleSize(options, reqWidth, reqHeight)
 
         options.inJustDecodeBounds = false
-        return BitmapFactory.decodeFileDescriptor(fd, null, options)!!
+        return try {
+            BitmapFactory.decodeFileDescriptor(fd, null, options)
+        } catch (_: OutOfMemoryError) {
+            null
+        }
     }
 
     fun getFileExtension(filePath: String): String? {

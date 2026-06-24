@@ -196,34 +196,37 @@ class FileShuttleService : Service() {
         if (id == -1) {
             return loadBitmapThumbnail(fullPath, sizeHint)
         }
-        var result = MediaStore.Images.Thumbnails.queryMiniThumbnail(
+        queryMiniThumbnailFd(id.toLong())?.let { return it }
+        MediaStore.Images.Thumbnails.getThumbnail(
             contentResolver,
             id.toLong(),
             MediaStore.Images.Thumbnails.MINI_KIND,
             null,
         )
-        if (result.count == 0) {
-            MediaStore.Images.Thumbnails.getThumbnail(
-                contentResolver,
-                id.toLong(),
-                MediaStore.Images.Thumbnails.MINI_KIND,
-                null,
-            )
-            result = MediaStore.Images.Thumbnails.queryMiniThumbnail(
-                contentResolver,
-                id.toLong(),
-                MediaStore.Images.Thumbnails.MINI_KIND,
-                null,
-            )
+        return queryMiniThumbnailFd(id.toLong()) ?: loadBitmapThumbnail(fullPath, sizeHint)
+    }
+
+    private fun queryMiniThumbnailFd(id: Long): ParcelFileDescriptor? {
+        val cursor = MediaStore.Images.Thumbnails.queryMiniThumbnail(
+            contentResolver,
+            id,
+            MediaStore.Images.Thumbnails.MINI_KIND,
+            null,
+        ) ?: return null
+        cursor.use {
+            if (it.count == 0) {
+                return null
+            }
+            it.moveToFirst()
+            return openThumbnailFd(it)
         }
-        if (result.count == 0) {
-            return loadBitmapThumbnail(fullPath, sizeHint)
-        }
-        result.moveToFirst()
+    }
+
+    private fun openThumbnailFd(cursor: android.database.Cursor): ParcelFileDescriptor? {
         return try {
-            val index = result.getColumnIndex(MediaStore.Images.Thumbnails.DATA)
+            val index = cursor.getColumnIndex(MediaStore.Images.Thumbnails.DATA)
             contentResolver.openFileDescriptor(
-                Uri.fromFile(File(result.getString(index))),
+                Uri.fromFile(File(cursor.getString(index))),
                 "r",
             )
         } catch (_: FileNotFoundException) {
@@ -259,8 +262,13 @@ class FileShuttleService : Service() {
                     os.flush()
                 }
             } catch (_: IOException) {
+            } finally {
+                try {
+                    pair[1].close()
+                } catch (_: IOException) {
+                }
+                bmp.recycle()
             }
-            bmp.recycle()
         }.start()
 
         return pair[0]

@@ -20,6 +20,14 @@ object AntiSpyLaunchGate {
     const val REASON_VPN_PERMISSION_REQUIRED = 2
     const val REASON_FAILED = 3
 
+    enum class VpnGateMode {
+        /** Try dummy-VPN displacement, then proceed or block. */
+        CLEAR_THEN_PROCEED,
+
+        /** Do not touch VPN; block while a tunnel is active (install APK, etc.). */
+        BLOCK_IF_ACTIVE,
+    }
+
     fun interface BlockedCallback {
         fun onBlocked(reason: Int)
     }
@@ -36,13 +44,32 @@ object AntiSpyLaunchGate {
         packageName: String?,
         forceGate: Boolean,
         onProceed: Runnable,
-        onBlocked: BlockedCallback?
+        onBlocked: BlockedCallback?,
+        mode: VpnGateMode = VpnGateMode.CLEAR_THEN_PROCEED,
     ) {
         if (!shouldApplyVpnGate(packageName, forceGate)) {
             onProceed.run()
             return
         }
+        if (mode == VpnGateMode.BLOCK_IF_ACTIVE) {
+            runBlockIfActive(context, packageName, onProceed, onBlocked)
+            return
+        }
         runBeforeLaunch(context, storage, packageName ?: "", onProceed, onBlocked)
+    }
+
+    private fun runBlockIfActive(
+        context: Context,
+        packageName: String?,
+        onProceed: Runnable,
+        onBlocked: BlockedCallback?,
+    ) {
+        if (!needsVpnClear(context, LocalStorageManager.getInstance())) {
+            onProceed.run()
+            return
+        }
+        notifyLaunchBlocked(context, REASON_VPN_STILL_ACTIVE, packageName, installContext = true)
+        onBlocked?.onBlocked(REASON_VPN_STILL_ACTIVE)
     }
 
     fun runBeforeLaunch(
@@ -50,7 +77,7 @@ object AntiSpyLaunchGate {
         storage: LocalStorageManager,
         packageName: String,
         onProceed: Runnable,
-        onBlocked: BlockedCallback?
+        onBlocked: BlockedCallback?,
     ) {
         if (!needsVpnClear(context, storage)) {
             onProceed.run()
@@ -78,9 +105,14 @@ object AntiSpyLaunchGate {
         }
     }
 
-    fun notifyLaunchBlocked(context: Context, reason: Int, packageName: String) {
+    fun notifyLaunchBlocked(
+        context: Context,
+        reason: Int,
+        packageName: String?,
+        installContext: Boolean = false,
+    ) {
         val app = context.applicationContext
-        ZindanToast.show(app, messageForReason(app, reason), android.widget.Toast.LENGTH_LONG)
+        ZindanToast.show(app, messageForReason(app, reason, installContext), android.widget.Toast.LENGTH_LONG)
         val broadcast = Intent(BROADCAST_LAUNCH_BLOCKED_VPN)
         broadcast.putExtra(EXTRA_BLOCK_REASON, reason)
         if (!TextUtils.isEmpty(packageName)) {
@@ -89,11 +121,14 @@ object AntiSpyLaunchGate {
         LocalBroadcastManager.getInstance(app).sendBroadcast(broadcast)
     }
 
-    private fun messageForReason(context: Context, reason: Int): String {
-        return if (reason == REASON_VPN_PERMISSION_REQUIRED) {
-            context.getString(R.string.anti_spy_vpn_permission_required)
-        } else {
-            context.getString(R.string.anti_spy_vpn_block_launch_manual)
+    private fun messageForReason(context: Context, reason: Int, installContext: Boolean): String {
+        return when {
+            reason == REASON_VPN_PERMISSION_REQUIRED ->
+                context.getString(R.string.anti_spy_vpn_permission_required)
+            installContext ->
+                context.getString(R.string.anti_spy_vpn_block_install_apk)
+            else ->
+                context.getString(R.string.anti_spy_vpn_block_launch_manual)
         }
     }
 }

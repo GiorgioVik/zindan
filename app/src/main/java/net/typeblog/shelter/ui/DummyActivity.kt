@@ -37,6 +37,7 @@ import net.typeblog.shelter.util.InstallationProgressListener
 import net.typeblog.shelter.util.LocalStorageManager
 import net.typeblog.shelter.util.SettingsManager
 import net.typeblog.shelter.util.Utility
+import net.typeblog.shelter.util.VpnTunnelDetector
 import net.typeblog.shelter.util.WorkProfileBatchFreeze
 import java.io.File
 import java.io.IOException
@@ -215,6 +216,10 @@ class DummyActivity : Activity() {
     }
 
     private fun actionInstallPackage() {
+        if (isProfileOwner && VpnTunnelDetector.isVpnActive(this)) {
+            abortInstallBlockedByVpn()
+            return
+        }
         capturePendingPackageOperation(OperationType.INSTALL)
         var uri: Uri? = null
         if (intent.hasExtra("package")) {
@@ -262,6 +267,14 @@ class DummyActivity : Activity() {
 
         val session = pi.openSession(sessionId)
         doInstallPackageQ(uri, splitApks, session) {
+            if (isProfileOwner && VpnTunnelDetector.isVpnActive(this)) {
+                try {
+                    session.abandon()
+                } catch (_: Exception) {
+                }
+                abortInstallBlockedByVpn()
+                return@doInstallPackageQ
+            }
             session.setStagingProgress(0.1f)
             val callbackIntent = Intent(this, DummyActivity::class.java).apply {
                 action = PACKAGEINSTALLER_CALLBACK
@@ -328,6 +341,25 @@ class DummyActivity : Activity() {
             this, 0, callbackIntent, PendingIntent.FLAG_MUTABLE
         )
         pi.uninstall(requireNotNull(intent.getStringExtra("package")), pendingIntent.intentSender)
+    }
+
+    private fun abortInstallBlockedByVpn() {
+        FileProviderProxy.clearForwardProxy()
+        var callback: IAppInstallCallback? = null
+        if (intent.hasExtra("callback")) {
+            val callbackExtra = intent.getBundleExtra("callback")
+            callback = IAppInstallCallback.Stub.asInterface(callbackExtra!!.getBinder("callback"))
+        }
+        val pending = consumePendingPackageOperation()
+        if (callback == null) {
+            callback = pending?.callback
+        }
+        try {
+            callback?.callback(RESULT_CANCELED)
+        } catch (_: RemoteException) {
+        }
+        Utility.showToastOnMainProfile(this, R.string.anti_spy_vpn_block_install_apk)
+        finish()
     }
 
     private fun appInstallFinished(resultCode: Int) {
@@ -704,11 +736,11 @@ class DummyActivity : Activity() {
             LocalStorageManager.getInstance()
                 .setStringList(LocalStorageManager.PREF_AUTO_FREEZE_LIST_WORK_PROFILE, list)
             AntiSpyVpnWatchService.syncState(this)
-            val frozen = WorkProfileBatchFreeze.freezeList(this, list)
-            val stillVisible = WorkProfileBatchFreeze.countStillVisible(this, list)
-            if (stillVisible == 0) {
-                Utility.notifyVpnBatchFreezeSessionComplete(this, frozen > 0)
-            } else if (frozen > 0) {
+            val result = WorkProfileBatchFreeze.freezeListWithResult(this, list)
+            WorkProfileBatchFreeze.persistLastBatchResult(this, result)
+            if (result.allHidden) {
+                Utility.notifyVpnBatchFreezeSessionComplete(this, result.newlyFrozenCount > 0)
+            } else if (result.newlyFrozenCount > 0) {
                 Utility.postVpnAutoFreezeSuccessAlert(this)
                 Utility.showToastOnMainProfile(this, R.string.freeze_all_success)
             }

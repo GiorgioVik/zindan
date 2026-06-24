@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="zindanGreenDark">#223D2C</color>
+    <color name="zindanOliveDark">#3A3528</color>
+    <color name="zindanOliveDarkSelected">#4A4432</color>
     <color name="zindanDarkYellow">#C9A855</color>
     <color name="zindanLightYellow">#F7E98E</color>
 
@@ -13,7 +15,7 @@
     <color name="colorTextPrimary">#FFFFFF</color>
     <color name="colorTextOnLight">@color/zindanLightYellow</color>
     <color name="colorTextSecondary">#9E9E9E</color>
-    <color name="disabledAppBackground">@color/zindanGreenDark</color>
+    <color name="disabledAppBackground">@color/zindanOliveDark</color>
     <color name="selectedAppBackground">#152820</color>
-    <color name="selectedAndDisabledAppBackground">#1E3A2C</color>
+    <color name="selectedAndDisabledAppBackground">@color/zindanOliveDarkSelected</color>
 </resources>

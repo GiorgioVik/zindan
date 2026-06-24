@@ -12,7 +12,7 @@ import net.typeblog.shelter.R
 import net.typeblog.shelter.util.AntiSpyManager
 import net.typeblog.shelter.util.LocalStorageManager
 import net.typeblog.shelter.util.Utility
-import net.typeblog.shelter.util.WorkProfileBatchFreeze
+import net.typeblog.shelter.util.WorkProfileVpnFreezeCoordinator
 
 /**
  * Runs batch freeze inside the work profile without starting an Activity.
@@ -44,12 +44,7 @@ class BatchFreezeService : Service() {
         LocalStorageManager.getInstance()
             .setStringList(LocalStorageManager.PREF_AUTO_FREEZE_LIST_WORK_PROFILE, list)
         Log.i(TAG, "freeze requested pid=${Process.myPid()} list size=${list.size}")
-        val newlyFrozen = WorkProfileBatchFreeze.freezeList(this, list)
-        val stillVisible = WorkProfileBatchFreeze.countStillVisible(this, list)
-        Log.i(TAG, "VPN-up freeze: newly=$newlyFrozen stillVisible=$stillVisible")
-        if (stillVisible == 0) {
-            Utility.notifyVpnBatchFreezeSessionComplete(this, newlyFrozen > 0)
-        }
+        WorkProfileVpnFreezeCoordinator.requestFreeze(this, list, "BatchFreezeService")
         stopSelf()
         return START_NOT_STICKY
     }
@@ -60,32 +55,25 @@ class BatchFreezeService : Service() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
             return
         }
-        try {
-            val notification: Notification = Utility.buildNotification(
-                this,
-                true,
-                getString(R.string.anti_spy_monitor_notification_title),
-                getString(R.string.anti_spy_monitor_notification_title),
-                getString(R.string.anti_spy_monitor_notification_text),
-                R.drawable.ic_lock_open_white_24dp,
-            )
-            startForeground(NOTIFICATION_ID, notification)
-        } catch (e: Exception) {
-            Log.w(TAG, "startForeground failed for batch freeze", e)
-        }
+        val notification = Utility.buildNotification(
+            this,
+            getString(R.string.anti_spy_monitor_notification_title),
+            getString(R.string.anti_spy_monitor_notification_title),
+            getString(R.string.anti_spy_monitor_notification_text),
+            R.drawable.ic_lock_open_white_24dp,
+        )
+        startForeground(NOTIFICATION_ID, notification)
     }
 
     companion object {
         private const val TAG = "BatchFreezeService"
-        private const val NOTIFICATION_ID = 0xe49d4
+        private const val NOTIFICATION_ID = 0xe49e6
         const val ACTION = "net.typeblog.shelter.action.BATCH_FREEZE_WORK"
 
-        fun buildIntent(context: Context, list: Array<String>?): Intent {
+        fun buildIntent(context: Context, list: Array<String>): Intent {
             val intent = Intent(ACTION)
             intent.setClass(context.applicationContext, BatchFreezeService::class.java)
-            if (list != null) {
-                intent.putExtra(AntiSpyManager.EXTRA_AUTO_FREEZE_LIST, list)
-            }
+            intent.putExtra(AntiSpyManager.EXTRA_AUTO_FREEZE_LIST, list)
             return intent
         }
     }

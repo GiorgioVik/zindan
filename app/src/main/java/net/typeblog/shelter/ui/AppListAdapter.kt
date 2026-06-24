@@ -3,8 +3,10 @@ package net.typeblog.shelter.ui
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.drawable.Drawable
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.util.LruCache
 import android.os.RemoteException
 import android.view.LayoutInflater
 import android.view.View
@@ -98,27 +100,36 @@ class AppListAdapter(
             } else {
                 itemView.setBackgroundResource(R.color.selectedAndDisabledAppBackground)
             }
-            updateTitleTextColor(list[itemIndex])
+            updateTextColors(list[itemIndex])
             selectOrder.visibility = View.VISIBLE
             selectOrder.text = (selectedIndices.indexOf(itemIndex) + 1).toString()
         }
 
         fun hideSelectOrder() {
             setUnselectedBackground()
-            updateTitleTextColor(list[itemIndex])
+            updateTextColors(list[itemIndex])
             selectOrder.visibility = View.GONE
         }
 
-        private fun updateTitleTextColor(info: ApplicationInfoWrapper) {
+        private fun updateTextColors(info: ApplicationInfoWrapper) {
             val onDarkBackground = info.isHidden() ||
                 (multiSelectMode && selectedIndices.contains(itemIndex)) ||
                 isDarkListBackground(itemView.context)
-            val titleColor = if (onDarkBackground) {
-                R.color.colorTextPrimary
+            if (onDarkBackground) {
+                title.setTextColor(
+                    ContextCompat.getColor(itemView.context, R.color.colorTextPrimary),
+                )
+                pkg.setTextColor(
+                    ContextCompat.getColor(itemView.context, R.color.colorTextSecondary),
+                )
             } else {
-                R.color.colorTextOnLight
+                title.setTextColor(
+                    ContextCompat.getColor(itemView.context, R.color.colorTextOnLight),
+                )
+                pkg.setTextColor(
+                    ContextCompat.getColor(itemView.context, R.color.colorTextSecondary),
+                )
             }
-            title.setTextColor(ContextCompat.getColor(itemView.context, titleColor))
         }
 
         private fun isDarkListBackground(context: Context): Boolean {
@@ -146,7 +157,7 @@ class AppListAdapter(
 
                 val info = list[itemIndex]
                 pkg.text = info.getPackageName()
-                updateTitleTextColor(info)
+                updateTextColors(info)
 
                 if (info.isHidden()) {
                     title.text = String.format(labelDisabled!!, info.getLabel())
@@ -166,8 +177,9 @@ class AppListAdapter(
                     hideSelectOrder()
                 }
 
-                if (iconCache.containsKey(info.getPackageName())) {
-                    icon.setImageBitmap(iconCache[info.getPackageName()])
+                val cachedIcon = iconCache.get(info.getPackageName())
+                if (cachedIcon != null) {
+                    icon.setImageBitmap(cachedIcon)
                 } else {
                     icon.setImageDrawable(defaultIcon)
                     try {
@@ -177,7 +189,7 @@ class AppListAdapter(
                                     handler.post { icon.setImageBitmap(iconBitmap) }
                                 }
                                 synchronized(AppListAdapter::class.java) {
-                                    iconCache[info.getPackageName()] = iconBitmap
+                                    iconCache.put(info.getPackageName(), iconBitmap)
                                 }
                             }
                         })
@@ -203,9 +215,15 @@ class AppListAdapter(
     private val origList = ArrayList<ApplicationInfoWrapper>()
     private val list = ArrayList<ApplicationInfoWrapper>()
     private var searchQuery: String? = null
-    private val iconCache = object : LinkedHashMap<String, Bitmap>(16, 0.75f, true) {
-        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Bitmap>?): Boolean {
-            return size > MAX_ICON_CACHE_ENTRIES
+    private val iconCache = object : LruCache<String, Bitmap>(MAX_ICON_CACHE_KB) {
+        override fun sizeOf(key: String, value: Bitmap): Int {
+            val bytes = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+                value.allocationByteCount
+            } else {
+                @Suppress("DEPRECATION")
+                value.byteCount
+            }
+            return (bytes / 1024).coerceAtLeast(1)
         }
     }
     private var contextMenuHandler: ContextMenuHandler? = null
@@ -261,7 +279,7 @@ class AppListAdapter(
     fun setData(apps: List<ApplicationInfoWrapper>) {
         origList.clear()
         list.clear()
-        iconCache.clear()
+        iconCache.evictAll()
         origList.addAll(apps)
         notifyChange()
     }
@@ -307,6 +325,6 @@ class AppListAdapter(
     }
 
     companion object {
-        private const val MAX_ICON_CACHE_ENTRIES = 80
+        private const val MAX_ICON_CACHE_KB = 8192
     }
 }

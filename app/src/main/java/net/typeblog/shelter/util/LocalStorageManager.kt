@@ -31,6 +31,13 @@ class LocalStorageManager private constructor(context: Context) {
         prefs.edit().putInt(pref, value).apply()
     }
 
+    fun getLong(pref: String, defaultValue: Long = 0L): Long =
+        prefs.getLong(pref, defaultValue)
+
+    fun setLong(pref: String, value: Long) {
+        prefs.edit().putLong(pref, value).apply()
+    }
+
     fun getString(pref: String): String? = prefs.getString(pref, null)
 
     fun setString(pref: String, value: String) {
@@ -97,6 +104,11 @@ class LocalStorageManager private constructor(context: Context) {
         const val PREF_AUTO_FREEZE_OPT_OUT_WORK_PROFILE = "auto_freeze_opt_out_work_profile"
         /** Store installs waiting for cross-profile write to the auto-freeze list. */
         const val PREF_PENDING_STORE_AUTO_FREEZE = "pending_store_auto_freeze"
+        /** Last batch-freeze summary (VPN or manual) for diagnostics. */
+        const val PREF_LAST_BATCH_FREEZE_AT = "last_batch_freeze_at"
+        const val PREF_LAST_BATCH_FREEZE_NEWLY = "last_batch_freeze_newly"
+        const val PREF_LAST_BATCH_FREEZE_STILL_VISIBLE = "last_batch_freeze_still_visible"
+        const val PREF_LAST_BATCH_FREEZE_STILL_VISIBLE_PKGS = "last_batch_freeze_still_visible_pkgs"
 
         private const val LIST_DIVIDER = ","
         private const val PREFS_NAME = "prefs"

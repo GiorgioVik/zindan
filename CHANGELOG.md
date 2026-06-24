@@ -1,3 +1,17 @@
+1.5.4 (242)
+===
+
+**APK:** `Zindan-1.5.4-(242)-debug.apk`
+
+- Unified freeze engine: all work-profile hide paths use `WorkProfileBatchFreeze` with PM verify + reconcile (`ShelterService`, `FreezeService`, batch).
+- VPN batch-freeze coordinator in work profile: single in-flight job, bounded retries, dedupe across receiver / `BatchFreezeService` / `:vpnwatch`.
+- Last batch-freeze summary persisted (newly frozen count, still-visible packages).
+- **Install APK:** VPN gate blocks without displacing the tunnel; re-check before install in work profile and before `PackageInstaller` commit.
+- Work profile list auto-refresh after VPN batch-freeze (hidden-state polling, multi-path delivery, session-complete receiver).
+- Frozen app rows use dark olive background (distinct from green navigation bar).
+- `FreezeService`: fix `unlockReceiver` leak after lock/unlock cycles.
+- Memory: Cursor `use {}` in File Shuttle / MediaStore; byte-bounded icon LRU cache; safer `decodeSampledBitmap`; pipe cleanup in thumbnails.
+
 1.5.3 (235)
 ===
 

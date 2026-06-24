@@ -26,7 +26,7 @@ import net.typeblog.shelter.util.AntiSpyVpnPromptManager
 import net.typeblog.shelter.util.LocalStorageManager
 import net.typeblog.shelter.util.Utility
 import net.typeblog.shelter.util.VpnTunnelDetector
-import net.typeblog.shelter.util.WorkProfileBatchFreeze
+import net.typeblog.shelter.util.WorkProfileVpnFreezeCoordinator
 import net.typeblog.shelter.util.ZindanToast
 
 /**
@@ -136,6 +136,7 @@ class AntiSpyVpnWatchService : Service() {
                     return
                 }
                 vpnFreezeDoneForSession = true
+                WorkProfileVpnFreezeCoordinator.markSessionComplete()
                 Log.i(TAG, "VPN batch-freeze session complete")
             }
         }
@@ -214,6 +215,10 @@ class AntiSpyVpnWatchService : Service() {
         if (!vpnActive) {
             vpnFreezeDoneForSession = false
             mainVpnBatchFreezeDispatched = false
+            vpnFreezeInFlight = false
+            if (!isMainProfileWatcher()) {
+                WorkProfileVpnFreezeCoordinator.resetSession()
+            }
             AntiSpyVpnPromptManager.onVpnSessionEnded()
             if (isMainProfileWatcher()) {
                 postVpnStateAlert(R.string.anti_spy_vpn_alert_disconnected_text)
@@ -222,6 +227,8 @@ class AntiSpyVpnWatchService : Service() {
         }
         if (isMainProfileWatcher()) {
             postVpnStateAlert(R.string.anti_spy_vpn_alert_connected_text)
+        } else {
+            WorkProfileVpnFreezeCoordinator.resetSession()
         }
         handler.post(freezeRunnable)
     }
@@ -264,27 +271,11 @@ class AntiSpyVpnWatchService : Service() {
                 return
             }
 
-            Utility.requestVpnBatchFreeze(this)
-            Log.i(TAG, "VPN batch-freeze requested from WORK watcher")
-            postFreezeDiagnostic("WORK: запрос заморозки (основной список)")
-
             val list = AntiSpyManager.getAutoFreezeList(this)
             if (list.isEmpty()) {
                 postFreezeDiagnostic("WORK: список пуст — открой Zindan один раз")
-            } else {
-                val frozen = WorkProfileBatchFreeze.freezeList(this, list)
-                val stillVisible = WorkProfileBatchFreeze.countStillVisible(this, list)
-                Log.i(
-                    TAG,
-                    "VPN direct freeze in work: $frozen of ${list.size}, stillVisible=$stillVisible"
-                )
-                if (stillVisible > 0) {
-                    postFreezeDiagnostic("WORK: не заморожено $stillVisible — повтор…")
-                } else {
-                    postFreezeDiagnostic("WORK: заморожено $frozen из ${list.size}")
-                    vpnFreezeDoneForSession = true
-                    Utility.notifyVpnBatchFreezeSessionComplete(this, frozen > 0)
-                }
+            } else if (WorkProfileVpnFreezeCoordinator.requestFreeze(this, list, "work-watcher")) {
+                postFreezeDiagnostic("WORK: заморозка (координатор)")
             }
         } finally {
             handler.postDelayed({ vpnFreezeInFlight = false }, 1500L)

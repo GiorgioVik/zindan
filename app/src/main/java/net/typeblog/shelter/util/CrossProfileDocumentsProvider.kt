@@ -1,5 +1,6 @@
 package net.typeblog.shelter.util
 
+import android.content.ComponentCallbacks2
 import android.content.Intent
 import android.content.res.AssetFileDescriptor
 import android.database.Cursor
@@ -84,6 +85,13 @@ class CrossProfileDocumentsProvider : DocumentsProvider() {
     }
 
     override fun onCreate(): Boolean = true
+
+    override fun onTrimMemory(level: Int) {
+        handler.removeCallbacks(releaseServiceTask)
+        if (level >= ComponentCallbacks2.TRIM_MEMORY_MODERATE) {
+            releaseService()
+        }
+    }
 
     override fun queryRoots(projection: Array<String>?): Cursor {
         val result = MatrixCursor(projection ?: DEFAULT_ROOT_PROJECTION)
