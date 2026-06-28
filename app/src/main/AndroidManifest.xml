@@ -151,6 +151,21 @@
             </intent-filter>
         </receiver>
 
+        <receiver android:name=".receivers.AntiSpyVpnWatchWatchdogReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="net.typeblog.shelter.action.VPN_WATCH_WATCHDOG" />
+                <action android:name="net.typeblog.shelter.action.VPN_WATCH_FGS_RETRY" />
+            </intent-filter>
+        </receiver>
+
+        <receiver android:name=".receivers.VpnWatchHeartbeatReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="net.typeblog.shelter.action.VPN_WATCH_HEARTBEAT" />
+            </intent-filter>
+        </receiver>
+
         <receiver android:name=".receivers.WorkProfilePackageAddedReceiver"
             android:exported="true"
             android:enabled="true">

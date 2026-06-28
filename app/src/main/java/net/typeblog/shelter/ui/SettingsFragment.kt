@@ -22,9 +22,11 @@ import androidx.preference.PreferenceFragmentCompat
 import net.typeblog.shelter.BuildConfig
 import net.typeblog.shelter.R
 import net.typeblog.shelter.services.IShelterService
+import net.typeblog.shelter.util.AntiSpyVpnWatchHealth
 import net.typeblog.shelter.util.LocalStorageManager
 import net.typeblog.shelter.util.SettingsManager
 import net.typeblog.shelter.util.Utility
+import net.typeblog.shelter.util.ZindanToast
 
 class SettingsFragment : PreferenceFragmentCompat(), Preference.OnPreferenceChangeListener {
     private val manager = SettingsManager.getInstance()
@@ -36,6 +38,7 @@ class SettingsFragment : PreferenceFragmentCompat(), Preference.OnPreferenceChan
     private var prefSkipForeground: CheckBoxPreference? = null
     private var prefPaymentStub: CheckBoxPreference? = null
     private var prefAutoFreezeDelay: DropDownPreference? = null
+    private var prefVpnWatchHealth: Preference? = null
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
@@ -98,6 +101,10 @@ class SettingsFragment : PreferenceFragmentCompat(), Preference.OnPreferenceChan
             .setOnPreferenceClickListener(this::createFreezeAllShortcut)
         findPreference<Preference>(SETTINGS_CREATE_UNFREEZE_ALL_SHORTCUT)!!
             .setOnPreferenceClickListener(this::createUnfreezeAllShortcut)
+
+        prefVpnWatchHealth = findPreference(SETTINGS_VPN_WATCH_HEALTH)
+        prefVpnWatchHealth!!.setOnPreferenceClickListener(this::restartVpnWatch)
+        updateVpnWatchHealthSummary()
 
         if (Build.VERSION.SDK_INT == Build.VERSION_CODES.Q) {
             prefCrossProfileFileChooser!!.isEnabled = false
@@ -169,6 +176,25 @@ class SettingsFragment : PreferenceFragmentCompat(), Preference.OnPreferenceChan
     override fun onResume() {
         super.onResume()
         updateAutoFreezeDelay()
+        updateVpnWatchHealthSummary()
+    }
+
+    private fun updateVpnWatchHealthSummary() {
+        val pref = prefVpnWatchHealth ?: return
+        val ctx = requireContext()
+        LocalStorageManager.initialize(ctx.applicationContext)
+        val mainLine = AntiSpyVpnWatchHealth.formatStatusLine(ctx, mainProfile = true)
+        val workLine = AntiSpyVpnWatchHealth.formatStatusLine(ctx, mainProfile = false)
+        pref.summary = getString(R.string.settings_vpn_watch_summary_main, mainLine) +
+            "\n" +
+            getString(R.string.settings_vpn_watch_summary_work, workLine)
+    }
+
+    private fun restartVpnWatch(pref: Preference): Boolean {
+        AntiSpyVpnWatchHealth.restartMonitoring(requireContext())
+        updateVpnWatchHealthSummary()
+        ZindanToast.show(requireContext(), R.string.settings_vpn_watch_restarted)
+        return true
     }
 
     override fun onPreferenceChange(preference: Preference, newState: Any): Boolean {
@@ -284,6 +310,7 @@ class SettingsFragment : PreferenceFragmentCompat(), Preference.OnPreferenceChan
         private const val SETTINGS_UNFREEZE_ALL = "settings_unfreeze_all"
         private const val SETTINGS_CREATE_FREEZE_ALL_SHORTCUT = "settings_create_freeze_all_shortcut"
         private const val SETTINGS_CREATE_UNFREEZE_ALL_SHORTCUT = "settings_create_unfreeze_all_shortcut"
+        private const val SETTINGS_VPN_WATCH_HEALTH = "settings_vpn_watch_health"
 
         private val AUTO_FREEZE_DELAY_SECONDS = intArrayOf(0, 60, 2 * 60, 5 * 60)
     }

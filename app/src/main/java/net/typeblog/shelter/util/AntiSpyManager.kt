@@ -65,6 +65,7 @@ object AntiSpyManager {
         AntiSpyVpnWatchService.syncState(context)
         if (!isWorkProfile(context)) {
             syncAutoFreezeListToWorkProfile(context)
+            AntiSpyVpnWatchHealth.scheduleWatchdog(context)
         }
     }
 

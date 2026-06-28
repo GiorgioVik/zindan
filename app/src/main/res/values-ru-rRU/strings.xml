@@ -125,4 +125,17 @@
     <string name="allow_cross_profile_interaction">Разрешить работу между профилями</string>
     <string name="settings_payment_stub_desc">Чтобы получить возможность выбрать платёжное приложение внутри рабочего профиля в Настройки - NFC, включите фальшивый платёжный сервис NFC в основном профиле. Это временное решение ошибки Android, из-за которой невозможно выбрать платёжное приложение внутри рабочего профиля, если в основном профиле таких нет.</string>
     <string name="settings_payment_stub">Заглушка платёжных сервисов</string>
+    <string name="settings_vpn_watch_health">Anti Spy — контроль VPN</string>
+    <string name="settings_vpn_watch_health_desc">Нажмите, чтобы перезапустить мониторинг. Статус обновляется при открытии настроек.</string>
+    <string name="settings_vpn_watch_status_never">основной профиль: ещё не запущен</string>
+    <string name="settings_vpn_watch_status_work_unknown">рабочий профиль: нет сигнала (откройте Zindan)</string>
+    <string name="settings_vpn_watch_status_stale">нет ответа %1$s — нажмите для перезапуска</string>
+    <string name="settings_vpn_watch_status_ok">активен (%1$s назад), VPN %2$s</string>
+    <string name="settings_vpn_watch_vpn_on">включён</string>
+    <string name="settings_vpn_watch_vpn_off">выключен</string>
+    <string name="settings_vpn_watch_age_seconds">%1$d с</string>
+    <string name="settings_vpn_watch_age_minutes">%1$d мин</string>
+    <string name="settings_vpn_watch_summary_main">Основной: %1$s</string>
+    <string name="settings_vpn_watch_summary_work">Рабочий: %1$s</string>
+    <string name="settings_vpn_watch_restarted">Мониторинг VPN перезапущен</string>
 </resources>

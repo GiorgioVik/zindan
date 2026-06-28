@@ -109,6 +109,19 @@
     <string name="settings_version">Version</string>
     <string name="settings_source_code">Source Code</string>
     <string name="settings_source_code_url" translatable="false">https://github.com/GiorgioVik/zindan</string>
+    <string name="settings_vpn_watch_health">Anti Spy VPN monitor</string>
+    <string name="settings_vpn_watch_health_desc">Tap to restart monitoring. Status updates when you open Settings.</string>
+    <string name="settings_vpn_watch_status_never">Main profile: not running yet</string>
+    <string name="settings_vpn_watch_status_work_unknown">Work profile: no signal yet (open Zindan once)</string>
+    <string name="settings_vpn_watch_status_stale">No response for %1$s — tap to restart</string>
+    <string name="settings_vpn_watch_status_ok">Active (%1$s ago), VPN %2$s</string>
+    <string name="settings_vpn_watch_vpn_on">on</string>
+    <string name="settings_vpn_watch_vpn_off">off</string>
+    <string name="settings_vpn_watch_age_seconds">%1$d s</string>
+    <string name="settings_vpn_watch_age_minutes">%1$d min</string>
+    <string name="settings_vpn_watch_summary_main">Main: %1$s</string>
+    <string name="settings_vpn_watch_summary_work">Work: %1$s</string>
+    <string name="settings_vpn_watch_restarted">VPN monitoring restarted</string>
 
     <!-- Toast Long Texts -->
     <string name="provision_finished">Zindan setup complete. Now restarting Zindan. If Zindan didn\'t start automatically, you may launch it again from your launcher.</string>

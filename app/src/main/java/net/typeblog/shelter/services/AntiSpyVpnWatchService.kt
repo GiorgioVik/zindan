@@ -26,6 +26,7 @@ import net.typeblog.shelter.util.AntiSpyVpnPromptManager
 import net.typeblog.shelter.util.LocalStorageManager
 import net.typeblog.shelter.util.Utility
 import net.typeblog.shelter.util.VpnTunnelDetector
+import net.typeblog.shelter.util.AntiSpyVpnWatchHealth
 import net.typeblog.shelter.util.WorkProfileVpnFreezeCoordinator
 import net.typeblog.shelter.util.ZindanToast
 
@@ -59,28 +60,41 @@ class AntiSpyVpnWatchService : Service() {
         registerFreezeCompleteReceiver()
         vpnPresent = VpnTunnelDetector.isVpnActive(this)
         Log.d(TAG, "initial vpn=$vpnPresent")
+        AntiSpyVpnWatchHealth.scheduleWatchdog(this)
         handler.postDelayed(pollRunnable, VPN_POLL_MS)
     }
 
     private fun pollVpnState() {
         val active = scanVpnActive()
-        if (active && !vpnPresent) {
-            if (AntiSpyDummyVpnDisconnector.isSuppressingVpnReactions()) {
-                Log.d(TAG, "poll: vpn active but reactions suppressed")
-            } else {
-                Log.i(TAG, "poll: vpn became active")
-                onVpnStateChanged(true)
-            }
-        } else if (!active && vpnPresent) {
-            onVpnStateChanged(false)
-        } else if (active && !vpnFreezeDoneForSession &&
-            !AntiSpyDummyVpnDisconnector.isSuppressingVpnReactions()
-        ) {
+        AntiSpyVpnWatchHealth.recordHeartbeat(this, active)
+        ensureMonitoringHooksRegistered()
+
+        if (AntiSpyDummyVpnDisconnector.isSuppressingVpnReactions()) {
+            handler.postDelayed(pollRunnable, VPN_POLL_MS)
+            return
+        }
+
+        if (active != vpnPresent) {
+            Log.i(TAG, "poll self-heal: vpnPresent=$vpnPresent active=$active")
+            onVpnStateChanged(active)
+        } else if (active && !vpnFreezeDoneForSession) {
             // Edge-based triggering misses VPN-already-up and network churn; keep retrying until
             // BatchFreezeService reports every auto-freeze app is hidden (foreground VPN client).
             handler.post(freezeRunnable)
         }
         handler.postDelayed(pollRunnable, VPN_POLL_MS)
+    }
+
+    private fun ensureMonitoringHooksRegistered() {
+        if (vpnCallback == null || defaultCallback == null) {
+            registerVpnCallbacks()
+        }
+        if (connectivityReceiver == null) {
+            registerConnectivityReceiver()
+        }
+        if (freezeCompleteReceiver == null) {
+            registerFreezeCompleteReceiver()
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -103,6 +117,9 @@ class AntiSpyVpnWatchService : Service() {
             foregroundStarted = true
         } catch (e: Exception) {
             Log.e(TAG, "startForeground failed", e)
+            if (!AntiSpyManager.isWorkProfile(this)) {
+                AntiSpyVpnWatchHealth.scheduleFgsRetry(applicationContext)
+            }
             stopSelf()
         }
     }
@@ -377,7 +394,7 @@ class AntiSpyVpnWatchService : Service() {
         private const val DIAG_WORK_NOTIFICATION_ID = 0xe49db
         private const val VPN_POLL_MS = 2000L
 
-        fun syncState(context: Context) {
+        fun syncState(context: Context, allowBackgroundRetry: Boolean = true) {
             val app = context.applicationContext
             val intent = Intent(app, AntiSpyVpnWatchService::class.java)
             try {
@@ -389,13 +406,22 @@ class AntiSpyVpnWatchService : Service() {
                 Log.d(TAG, "syncState: start requested pid=${Process.myPid()}")
             } catch (e: SecurityException) {
                 Log.w(TAG, "FGS start denied", e)
+                if (allowBackgroundRetry) {
+                    AntiSpyVpnWatchHealth.scheduleFgsRetry(app)
+                }
             } catch (e: IllegalStateException) {
                 Log.w(TAG, "FGS start failed", e)
+                if (allowBackgroundRetry) {
+                    AntiSpyVpnWatchHealth.scheduleFgsRetry(app)
+                }
             } catch (e: RuntimeException) {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
                     e.javaClass.name == "android.app.ForegroundServiceStartNotAllowedException"
                 ) {
-                    Log.w(TAG, "FGS not allowed from background; will retry from foreground", e)
+                    Log.w(TAG, "FGS not allowed from background; scheduling retry", e)
+                    if (allowBackgroundRetry) {
+                        AntiSpyVpnWatchHealth.scheduleFgsRetry(app)
+                    }
                 } else {
                     throw e
                 }

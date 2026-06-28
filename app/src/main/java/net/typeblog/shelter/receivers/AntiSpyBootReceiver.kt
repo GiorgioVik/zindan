@@ -4,6 +4,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import net.typeblog.shelter.util.AntiSpyManager
+import net.typeblog.shelter.util.AntiSpyVpnWatchHealth
 import net.typeblog.shelter.util.LocalStorageManager
 import net.typeblog.shelter.util.Utility
 
@@ -22,5 +23,6 @@ class AntiSpyBootReceiver : BroadcastReceiver() {
         AntiSpyManager.onDeviceBoot(storage)
         Utility.trimApplicationCache(app)
         AntiSpyManager.syncVpnWatchEverywhere(app)
+        AntiSpyVpnWatchHealth.scheduleWatchdog(app)
     }
 }

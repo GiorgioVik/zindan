@@ -45,6 +45,7 @@ import net.typeblog.shelter.R
 import net.typeblog.shelter.receivers.AntiSpyVpnFreezeReceiver
 import net.typeblog.shelter.receivers.AppListRefreshReceiver
 import net.typeblog.shelter.receivers.ShelterDeviceAdminReceiver
+import net.typeblog.shelter.receivers.VpnWatchHeartbeatReceiver
 import net.typeblog.shelter.services.BatchFreezeService
 import net.typeblog.shelter.services.IShelterService
 import net.typeblog.shelter.ui.AppListFragment
@@ -417,6 +418,38 @@ object Utility {
 
     const val ACTION_VPN_BATCH_FREEZE_SESSION_COMPLETE =
         "net.typeblog.shelter.action.VPN_BATCH_FREEZE_SESSION_COMPLETE"
+
+    /** Work `:vpnwatch` → main profile heartbeat for Settings diagnostics. */
+    fun deliverVpnWatchHeartbeatToMainProfile(context: Context, at: Long, vpnActive: Boolean) {
+        val app = context.applicationContext
+        if (!AntiSpyManager.isWorkProfile(app)) {
+            AntiSpyVpnWatchHealth.recordWorkHeartbeatOnMain(at, vpnActive)
+            return
+        }
+        try {
+            val cross = Intent(AntiSpyVpnWatchHealth.ACTION_HEARTBEAT).apply {
+                setPackage(app.packageName)
+                component = ComponentName(app, VpnWatchHeartbeatReceiver::class.java)
+                putExtra(AntiSpyVpnWatchHealth.EXTRA_AT, at)
+                putExtra(AntiSpyVpnWatchHealth.EXTRA_VPN_ACTIVE, vpnActive)
+            }
+            transferIntentToProfile(app, cross)
+            val pi = PendingIntent.getBroadcast(
+                app,
+                0xE49EA,
+                cross,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+            val am = app.getSystemService(AlarmManager::class.java)
+            am?.set(
+                AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                SystemClock.elapsedRealtime() + 50,
+                pi,
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "deliverVpnWatchHeartbeatToMainProfile failed", e)
+        }
+    }
 
     /** Refresh both app-list tabs on the personal profile after work-profile freeze/unfreeze. */
     fun scheduleAppListRefreshOnMainProfile(context: Context) {

@@ -109,6 +109,15 @@ class LocalStorageManager private constructor(context: Context) {
         const val PREF_LAST_BATCH_FREEZE_NEWLY = "last_batch_freeze_newly"
         const val PREF_LAST_BATCH_FREEZE_STILL_VISIBLE = "last_batch_freeze_still_visible"
         const val PREF_LAST_BATCH_FREEZE_STILL_VISIBLE_PKGS = "last_batch_freeze_still_visible_pkgs"
+        /** `:vpnwatch` poll heartbeat (main profile, written in main user). */
+        const val PREF_VPN_WATCH_HEARTBEAT_MAIN = "vpn_watch_heartbeat_main"
+        const val PREF_VPN_WATCH_VPN_MAIN = "vpn_watch_vpn_main"
+        /** Work `:vpnwatch` heartbeat mirrored to main profile for Settings. */
+        const val PREF_VPN_WATCH_HEARTBEAT_WORK_MIRROR = "vpn_watch_heartbeat_work_mirror"
+        const val PREF_VPN_WATCH_VPN_WORK_MIRROR = "vpn_watch_vpn_work_mirror"
+        /** Written in work profile user (local diagnostics). */
+        const val PREF_VPN_WATCH_HEARTBEAT_WORK = "vpn_watch_heartbeat_work"
+        const val PREF_VPN_WATCH_VPN_WORK = "vpn_watch_vpn_work"
 
         private const val LIST_DIVIDER = ","
         private const val PREFS_NAME = "prefs"

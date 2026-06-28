@@ -59,6 +59,11 @@
             android:key="settings_create_freeze_all_shortcut"
             android:title="@string/create_freeze_all_shortcut" />
 
+        <androidx.preference.Preference
+            android:key="settings_vpn_watch_health"
+            android:title="@string/settings_vpn_watch_health"
+            android:summary="@string/settings_vpn_watch_health_desc" />
+
     </androidx.preference.PreferenceCategory>
 
     <androidx.preference.PreferenceCategory

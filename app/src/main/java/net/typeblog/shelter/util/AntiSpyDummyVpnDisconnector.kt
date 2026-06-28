@@ -8,11 +8,13 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.Process
+import android.os.SystemClock
 import android.util.Log
 import androidx.core.content.ContextCompat
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import net.typeblog.shelter.services.AntiSpyDummyVpnService
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Displaces an active VPN using a short pseudo [android.net.VpnService] tunnel.
@@ -36,8 +38,23 @@ object AntiSpyDummyVpnDisconnector {
     private const val WHOLE_OP_TIMEOUT_MS = 30000L
 
     private val suppressReactions = AtomicBoolean(false)
+    private val suppressSinceElapsedMs = AtomicLong(0L)
 
-    fun isSuppressingVpnReactions(): Boolean = suppressReactions.get()
+    fun isSuppressingVpnReactions(): Boolean {
+        if (!suppressReactions.get()) {
+            return false
+        }
+        val since = suppressSinceElapsedMs.get()
+        if (since > 0L &&
+            SystemClock.elapsedRealtime() - since > WHOLE_OP_TIMEOUT_MS + 5_000L
+        ) {
+            Log.w(TAG, "force-clear stale suppressReactions")
+            suppressReactions.set(false)
+            suppressSinceElapsedMs.set(0L)
+            return false
+        }
+        return true
+    }
 
     fun interface Callback {
         fun onResult(result: Int)
@@ -57,6 +74,7 @@ object AntiSpyDummyVpnDisconnector {
 
         Thread({
             suppressReactions.set(true)
+            suppressSinceElapsedMs.set(SystemClock.elapsedRealtime())
             val result = try {
                 tryClearVpnBlocking(app)
             } catch (e: Exception) {
@@ -64,6 +82,7 @@ object AntiSpyDummyVpnDisconnector {
                 RESULT_FAILED
             } finally {
                 suppressReactions.set(false)
+                suppressSinceElapsedMs.set(0L)
             }
             resultHandler.post {
                 resultHandler.removeCallbacks(deliverFailure)
