@@ -1,3 +1,12 @@
+1.5.4 (243)
+===
+
+**APK:** `Zindan-1.5.4-(243)-debug.apk`
+
+- Anti Spy VPN watcher hardening (Samsung S24 Ultra field issue): poll self-heal for `vpnPresent` desync, re-register NetworkCallbacks, 30-minute watchdog, FGS retry via AlarmManager, stale `suppressReactions` reset.
+- **Settings → Services → Anti Spy VPN monitor:** main/work heartbeat status; tap to restart monitoring without reboot.
+- User guide: warning not to clear Zindan app data (work profile access loss).
+
 1.5.4 (242)
 ===
 
