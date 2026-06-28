@@ -67,18 +67,22 @@ jobs:
 
       - name: Write release notes
         run: |
-          NOTES="RELEASE_NOTES_${{ steps.meta.outputs.tag }}.md"
-          if [ -f "${NOTES}" ]; then
-            cp "${NOTES}" release-notes.md
+          chmod +x tools/extract_release_notes.sh
+          if tools/extract_release_notes.sh "${{ steps.meta.outputs.tag }}" "${{ github.repository }}" \
+            > release-notes.md; then
+            echo "Release notes written ($(wc -l < release-notes.md) lines)"
           else
             cat > release-notes.md <<EOF
           ## Zindan ${{ steps.meta.outputs.version }} (${{ steps.meta.outputs.code }})
 
           Debug APK built from tag \`${{ steps.meta.outputs.tag }}\`.
 
+          Add a \`(${{ steps.meta.outputs.code }})\` section to [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) before tagging next time.
+
           See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md).
           EOF
           fi
+          head -20 release-notes.md
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
