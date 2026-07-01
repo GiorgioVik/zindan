@@ -36,6 +36,26 @@ object WorkProfileVpnFreezeCoordinator {
         inFlight = false
     }
 
+    /** Called before [BatchFreezeService] freeze; reopens session if apps are still visible. */
+    fun prepareForVpnBatch(context: Context, list: Array<String>) {
+        if (!AntiSpyManager.isWorkProfile(context)) {
+            return
+        }
+        if (!VpnTunnelDetector.isVpnActive(context)) {
+            return
+        }
+        val normalized = Utility.normalizeStringList(list)
+        if (normalized.isEmpty()) {
+            return
+        }
+        if (sessionComplete &&
+            WorkProfileBatchFreeze.countStillVisible(context, normalized) > 0
+        ) {
+            Log.i(TAG, "prepareForVpnBatch: reopening completed session")
+            resetSession()
+        }
+    }
+
     /**
      * @return true if a freeze job was accepted (not deduplicated).
      */
@@ -50,8 +70,14 @@ object WorkProfileVpnFreezeCoordinator {
             return false
         }
         if (sessionComplete) {
-            Log.d(TAG, "skip: session complete ($source)")
-            return false
+            val stillVisible = WorkProfileBatchFreeze.countStillVisible(context, normalized)
+            if (stillVisible == 0) {
+                Log.d(TAG, "skip: session complete, all hidden ($source)")
+                return false
+            }
+            Log.i(TAG, "reopen session: $stillVisible auto-freeze apps still visible ($source)")
+            sessionComplete = false
+            inFlight = false
         }
         val now = SystemClock.elapsedRealtime()
         if (inFlight && now - lastAttemptElapsedMs < IN_FLIGHT_COOLDOWN_MS) {
@@ -96,7 +122,9 @@ object WorkProfileVpnFreezeCoordinator {
                 Log.i(
                     TAG,
                     "retry ${attempt + 1}/${MAX_RETRIES} stillVisible=" +
-                        "${result.stillVisiblePackages.size} from $source",
+                        "${result.stillVisiblePackages.size}, missing=" +
+                        "${result.missingPackages.size}, failedPolicy=" +
+                        "${result.failedPolicyPackages.size} from $source",
                 )
                 handler.postDelayed({
                     runAttempt(context, list, source, sessionId, attempt + 1)
@@ -107,7 +135,9 @@ object WorkProfileVpnFreezeCoordinator {
             Utility.notifyBatchFreezeComplete(context, result.newlyFrozenCount > 0)
             Log.w(
                 TAG,
-                "partial from $source stillVisible=${result.stillVisiblePackages.joinToString()}",
+                "partial from $source stillVisible=${result.stillVisiblePackages.joinToString()}, " +
+                    "missing=${result.missingPackages.joinToString()}, " +
+                    "failedPolicy=${result.failedPolicyPackages.joinToString()}",
             )
         }
     }

@@ -7,8 +7,12 @@ class LocalStorageManager private constructor(context: Context) {
     private val appContext: Context = context.applicationContext
     private var prefs: SharedPreferences = prefs()
 
+    @Suppress("DEPRECATION")
     private fun prefs(): SharedPreferences =
-        appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        appContext.getSharedPreferences(
+            PREFS_NAME,
+            Context.MODE_PRIVATE or Context.MODE_MULTI_PROCESS,
+        )
 
     fun remove(pref: String) {
         prefs.edit().remove(pref).apply()
@@ -51,17 +55,20 @@ class LocalStorageManager private constructor(context: Context) {
             .toTypedArray()
 
     /** Re-read from disk (needed for the {@code :vpnwatch} process). */
-    fun getStringListFresh(pref: String): Array<String> =
-        prefs().getString(pref, "")!!
+    fun getStringListFresh(pref: String): Array<String> {
+        prefs = prefs()
+        return prefs.getString(pref, "")!!
             .split(LIST_DIVIDER)
             .filter { it.isNotEmpty() }
             .toTypedArray()
+    }
 
     fun getBooleanFresh(pref: String, defaultValue: Boolean): Boolean =
         prefs().getBoolean(pref, defaultValue)
 
     fun setStringList(pref: String, list: Array<String>) {
-        prefs.edit().putString(pref, Utility.stringJoin(LIST_DIVIDER, list)).apply()
+        prefs.edit().putString(pref, Utility.stringJoin(LIST_DIVIDER, list)).commit()
+        prefs = prefs()
     }
 
     fun stringListContains(pref: String, item: String): Boolean =
@@ -74,7 +81,8 @@ class LocalStorageManager private constructor(context: Context) {
         } else {
             str + LIST_DIVIDER + newItem
         }
-        prefs.edit().putString(pref, str).apply()
+        prefs.edit().putString(pref, str).commit()
+        prefs = prefs()
     }
 
     fun removeFromStringList(pref: String, item: String) {
@@ -135,7 +143,7 @@ class LocalStorageManager private constructor(context: Context) {
 
         fun readStringListFresh(context: Context, pref: String): Array<String> =
             context.applicationContext
-                .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE or Context.MODE_MULTI_PROCESS)
                 .getString(pref, "")!!
                 .split(LIST_DIVIDER)
                 .filter { it.isNotEmpty() }

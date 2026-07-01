@@ -1,3 +1,15 @@
+1.5.5 (258)
+===
+
+**APK:** `Zindan-1.5.5-(258)-debug.apk`
+
+- Anti Spy VPN auto-freeze reliability fix for Samsung background mode: work `:vpnwatch` now retries while VPN is active until every auto-freeze app is hidden.
+- Work-profile fallback freezes from the local work-profile list when Android/Samsung blocks background cross-profile activity starts.
+- Auto-freeze list storage is hardened for the `:vpnwatch` process: synchronous list writes, fresh reads, and multi-process SharedPreferences mode.
+- Stale/missing packages are removed from the work auto-freeze list after batch freeze, preventing deleted packages from poisoning future sessions.
+- VPN batch freeze now reuses the same public "freeze all" entry where possible and keeps the work-profile DPM fallback as the reliable background path.
+- Removed temporary VPN diagnostic notifications from the release build; detailed diagnostics remain in `logcat`.
+
 1.5.4 (243)
 ===
 

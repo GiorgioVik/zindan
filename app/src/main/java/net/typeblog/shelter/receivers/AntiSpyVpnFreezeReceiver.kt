@@ -41,35 +41,21 @@ class AntiSpyVpnFreezeReceiver : BroadcastReceiver() {
         val list = Utility.normalizeStringList(AntiSpyManager.getAutoFreezeList(app))
         if (list.isEmpty()) {
             Log.w(TAG, "VPN batch freeze: auto-freeze list is empty")
-            Utility.postUserAlert(
-                app,
-                DIAG_NOTIFICATION_ID,
-                "Zindan VPN-диагностика",
-                "RECEIVER: список основного профиля пуст",
-            )
             return
         }
-        Log.i(TAG, "VPN batch freeze requested, list=${list.size}")
-        val started = Utility.startBatchFreezeInWorkProfile(app, list)
-        if (!started) {
-            val launched = Utility.launchFreezeInWorkProfile(app, list)
-            if (!launched) {
-                Utility.scheduleFreezeInWorkProfile(app, list)
-                Log.w(TAG, "VPN batch freeze: cross-profile delivery failed, AlarmManager fallback")
-            }
+        Log.i(TAG, "VPN batch freeze requested via public freeze-all path, list=${list.size}")
+        Log.i(TAG, "VPN batch freeze main packages: ${list.joinToString(",")}")
+        AntiSpyManager.syncAutoFreezeListToWorkProfile(app, force = true)
+        val publicLaunched = AntiSpyManager.runBatchFreezeAllFromVpn(app)
+        if (!publicLaunched) {
+            Log.w(TAG, "VPN public freeze-all path failed")
         }
-        Utility.postUserAlert(
-            app,
-            DIAG_NOTIFICATION_ID,
-            "Zindan VPN-диагностика",
-            "RECEIVER: список=${list.size}, сервис в work=$started",
-        )
+        Log.i(TAG, "VPN batch freeze delivery: public=$publicLaunched")
     }
 
     companion object {
         private const val TAG = "AntiSpyVpnFreeze"
-        private const val DIAG_NOTIFICATION_ID = 0xe49dc
-        private const val HANDLE_DEBOUNCE_MS = 5000L
+        private const val HANDLE_DEBOUNCE_MS = 1500L
         @Volatile
         private var lastHandleElapsedMs = 0L
         const val ACTION = "net.typeblog.shelter.action.VPN_BATCH_FREEZE"

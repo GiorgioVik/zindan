@@ -44,6 +44,7 @@ class BatchFreezeService : Service() {
         LocalStorageManager.getInstance()
             .setStringList(LocalStorageManager.PREF_AUTO_FREEZE_LIST_WORK_PROFILE, list)
         Log.i(TAG, "freeze requested pid=${Process.myPid()} list size=${list.size}")
+        WorkProfileVpnFreezeCoordinator.prepareForVpnBatch(this, list)
         WorkProfileVpnFreezeCoordinator.requestFreeze(this, list, "BatchFreezeService")
         stopSelf()
         return START_NOT_STICKY

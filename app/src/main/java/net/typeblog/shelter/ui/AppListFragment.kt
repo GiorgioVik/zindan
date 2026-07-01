@@ -354,7 +354,7 @@ class AppListFragment : BaseFragment() {
                         LocalStorageManager.PREF_AUTO_FREEZE_LIST_WORK_PROFILE, app.getPackageName()
                     )
                     AutoFreezeDefaults.optOutOfAutoFreeze(app.getPackageName())
-                    AntiSpyManager.syncAutoFreezeListToWorkProfile(requireContext())
+                    AntiSpyManager.syncAutoFreezeListToWorkProfile(requireContext(), force = true)
                     if (app.isHidden()) {
                         try {
                             service!!.unfreezeApp(app)
@@ -446,11 +446,27 @@ class AppListFragment : BaseFragment() {
                                 )
                                 AutoFreezeDefaults.clearWorkProfilePackageTracking(pkg)
                             }
+                            if (removed.isNotEmpty()) {
+                                AntiSpyManager.syncAutoFreezeListToWorkProfile(
+                                    requireContext(),
+                                    force = true
+                                )
+                            }
                         }
+                        val beforeMissingCleanup = LocalStorageManager.getInstance()
+                            .getStringList(LocalStorageManager.PREF_AUTO_FREEZE_LIST_WORK_PROFILE)
                         Utility.deleteMissingApps(
                             LocalStorageManager.PREF_AUTO_FREEZE_LIST_WORK_PROFILE,
                             apps
                         )
+                        val afterMissingCleanup = LocalStorageManager.getInstance()
+                            .getStringList(LocalStorageManager.PREF_AUTO_FREEZE_LIST_WORK_PROFILE)
+                        if (beforeMissingCleanup.size != afterMissingCleanup.size) {
+                            AntiSpyManager.syncAutoFreezeListToWorkProfile(
+                                requireContext(),
+                                force = true
+                            )
+                        }
                         var autoFreezeListChanged = false
                         autoFreezeListChanged = AutoFreezeDefaults.applyDefaultsForNewPackages(
                             requireContext(),

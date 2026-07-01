@@ -22,6 +22,7 @@ object AntiSpyManager {
     // unconditionally creates an infinite resume -> launch -> resume loop. We only push when the
     // list actually changed, so a repeated onResume with an unchanged list is a no-op.
     private var lastSyncedListSignature: String? = null
+    private var lastSyncAttemptElapsedMs: Long = 0L
 
     fun invalidateAutoFreezeListSync() {
         lastSyncedListSignature = null
@@ -47,7 +48,11 @@ object AntiSpyManager {
         val list = getAutoFreezeList()
         val signature = list.sorted().joinToString("\u0000")
         // Already pushed this exact list — skip to avoid the resume/launch loop (see field doc).
-        if (!force && signature == lastSyncedListSignature) {
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (!force &&
+            signature == lastSyncedListSignature &&
+            now - lastSyncAttemptElapsedMs < AUTO_FREEZE_SYNC_RETRY_MS
+        ) {
             return
         }
         try {
@@ -55,6 +60,8 @@ object AntiSpyManager {
             context.startActivity(intent)
             // Only remember it as synced once the launch succeeded, so a failed forward is retried.
             lastSyncedListSignature = signature
+            lastSyncAttemptElapsedMs = now
+            Log.i(TAG, "sync auto-freeze list to work requested, list=${list.size}")
         } catch (e: IllegalStateException) {
             Log.w(TAG, "sync auto-freeze list to work failed", e)
         }
@@ -77,6 +84,8 @@ object AntiSpyManager {
         AuthenticationUtility.signIntent(intent)
         return intent
     }
+
+    private const val AUTO_FREEZE_SYNC_RETRY_MS = 30_000L
 
     fun getAutoFreezeList(): Array<String> = getAutoFreezeList(null)
 
@@ -112,10 +121,14 @@ object AntiSpyManager {
         }
 
         if (delivery == AutoFreezeDelivery.FOREGROUND) {
-            launchPublicFreezeAll(context)
-            Utility.scheduleAppListRefresh(context)
-            Log.d(TAG, "auto-freeze requested (foreground)")
-            return -1
+            return if (launchPublicFreezeAll(context)) {
+                Utility.scheduleAppListRefresh(context)
+                Log.d(TAG, "auto-freeze requested (foreground)")
+                -1
+            } else {
+                Log.w(TAG, "auto-freeze foreground launch failed")
+                0
+            }
         }
 
         if (Utility.startBatchFreezeInWorkProfile(app, list)) {
@@ -150,12 +163,42 @@ object AntiSpyManager {
     }
 
     /** Signed [DummyActivity.PUBLIC_FREEZE_ALL] entry (shortcuts, menu, enable Anti Spy). */
-    private fun launchPublicFreezeAll(context: Context) {
+    private fun launchPublicFreezeAll(context: Context): Boolean {
         val intent = Intent(DummyActivity.PUBLIC_FREEZE_ALL)
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         intent.component = ComponentName(context, DummyActivity::class.java)
         AuthenticationUtility.signIntent(intent)
-        context.startActivity(intent)
+        return try {
+            context.startActivity(intent)
+            true
+        } catch (e: Exception) {
+            Log.w(TAG, "launch public freeze-all failed", e)
+            false
+        }
+    }
+
+    /** VPN path that intentionally reuses the same entry as the "freeze all" launcher shortcut. */
+    fun runBatchFreezeAllFromVpn(context: Context): Boolean {
+        val app = context.applicationContext
+        return if (isWorkProfile(app)) {
+            launchPublicFreezeAllInParent(app)
+        } else {
+            launchPublicFreezeAll(context)
+        }
+    }
+
+    private fun launchPublicFreezeAllInParent(context: Context): Boolean {
+        val intent = Intent(DummyActivity.PUBLIC_FREEZE_ALL)
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        return try {
+            Utility.transferIntentToProfile(context, intent)
+            AuthenticationUtility.signIntent(intent)
+            context.startActivity(intent)
+            true
+        } catch (e: Exception) {
+            Log.w(TAG, "launch parent public freeze-all failed", e)
+            false
+        }
     }
 
     /** Snowflake / batch-freeze button, boot-on-open, first launch after update. */

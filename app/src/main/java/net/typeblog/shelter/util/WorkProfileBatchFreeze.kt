@@ -42,7 +42,18 @@ object WorkProfileBatchFreeze {
             packages.filter { it.status == FreezeStatus.STILL_VISIBLE_FOREGROUND }
                 .map { it.packageName }
 
-        val allHidden: Boolean = stillVisiblePackages.isEmpty()
+        val missingPackages: List<String> =
+            packages.filter { it.status == FreezeStatus.PACKAGE_MISSING }
+                .map { it.packageName }
+
+        val failedPolicyPackages: List<String> =
+            packages.filter { it.status == FreezeStatus.FAILED_POLICY }
+                .map { it.packageName }
+
+        val allHidden: Boolean =
+            stillVisiblePackages.isEmpty() &&
+                missingPackages.isEmpty() &&
+                failedPolicyPackages.isEmpty()
     }
 
     private enum class FreezeOutcome {
@@ -134,7 +145,11 @@ object WorkProfileBatchFreeze {
             "newly frozen $newlyFrozen, reconciled $reconciled, already hidden $alreadyHidden, " +
                 "still visible $stillVisible, missing $missing, of ${normalized.size} packages"
         )
-        return BatchFreezeResult(results)
+        val result = BatchFreezeResult(results)
+        logProblemPackages("still visible", result.stillVisiblePackages)
+        logProblemPackages("missing", result.missingPackages)
+        logProblemPackages("failed policy", result.failedPolicyPackages)
+        return result
     }
 
     fun persistLastBatchResult(context: Context, result: BatchFreezeResult) {
@@ -147,8 +162,27 @@ object WorkProfileBatchFreeze {
         )
         storage.setStringList(
             LocalStorageManager.PREF_LAST_BATCH_FREEZE_STILL_VISIBLE_PKGS,
-            result.stillVisiblePackages.toTypedArray(),
+            (result.stillVisiblePackages + result.missingPackages + result.failedPolicyPackages)
+                .toTypedArray(),
         )
+        removeMissingFromAutoFreezeList(storage, result.missingPackages)
+    }
+
+    private fun removeMissingFromAutoFreezeList(
+        storage: LocalStorageManager,
+        missingPackages: List<String>,
+    ) {
+        if (missingPackages.isEmpty()) {
+            return
+        }
+        val missing = missingPackages.toHashSet()
+        val current = storage.getStringListFresh(LocalStorageManager.PREF_AUTO_FREEZE_LIST_WORK_PROFILE)
+        val cleaned = current.filter { it !in missing }.toTypedArray()
+        if (cleaned.size == current.size) {
+            return
+        }
+        storage.setStringList(LocalStorageManager.PREF_AUTO_FREEZE_LIST_WORK_PROFILE, cleaned)
+        Log.i(TAG, "removed missing packages from work auto-freeze list: ${missing.joinToString()}")
     }
 
     /** Packages in [list] that PackageManager can still resolve (not actually hidden). */
@@ -179,11 +213,12 @@ object WorkProfileBatchFreeze {
         context: Context,
         pkg: String,
     ): FreezeOutcome {
-        if (!isInstalled(context, pkg)) {
-            return FreezeOutcome.PACKAGE_MISSING
-        }
         if (!isResolvable(context, pkg)) {
-            return FreezeOutcome.ALREADY
+            return if (isKnownToPackageManager(context, pkg)) {
+                FreezeOutcome.ALREADY
+            } else {
+                FreezeOutcome.PACKAGE_MISSING
+            }
         }
         if (dpm.isApplicationHidden(admin, pkg)) {
             Log.w(TAG, "desync: $pkg hidden in DPM but visible in PM, re-applying")
@@ -222,9 +257,23 @@ object WorkProfileBatchFreeze {
         return true
     }
 
-    private fun isInstalled(context: Context, pkg: String): Boolean {
+    private fun logProblemPackages(label: String, packages: List<String>) {
+        if (packages.isEmpty()) {
+            return
+        }
+        Log.w(
+            TAG,
+            "$label packages (${packages.size}): ${packages.take(MAX_LOGGED_PACKAGES).joinToString()}",
+        )
+    }
+
+    private fun isKnownToPackageManager(context: Context, pkg: String): Boolean {
         return try {
-            context.packageManager.getPackageInfo(pkg, 0)
+            context.packageManager.getPackageInfo(
+                pkg,
+                PackageManager.MATCH_DISABLED_COMPONENTS or
+                    PackageManager.MATCH_UNINSTALLED_PACKAGES,
+            )
             true
         } catch (_: PackageManager.NameNotFoundException) {
             false
@@ -246,4 +295,6 @@ object WorkProfileBatchFreeze {
     /** Same list as the snowflake button; delegates to [AntiSpyManager.getAutoFreezeList]. */
     fun freezeAutoFreezeList(context: Context): Int =
         freezeList(context, AntiSpyManager.getAutoFreezeList())
+
+    private const val MAX_LOGGED_PACKAGES = 20
 }
